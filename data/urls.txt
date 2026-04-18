@@ -1,0 +1,42 @@
+# AWS Documentation and Blogs for KB Seeding
+# Lines starting with # are comments
+
+# Well-Architected Framework
+https://docs.aws.amazon.com/wellarchitected/latest/framework/welcome.html
+https://docs.aws.amazon.com/wellarchitected/latest/framework/operational-excellence.html
+https://docs.aws.amazon.com/wellarchitected/latest/framework/security.html
+https://docs.aws.amazon.com/wellarchitected/latest/framework/reliability.html
+https://docs.aws.amazon.com/wellarchitected/latest/framework/performance-efficiency.html
+https://docs.aws.amazon.com/wellarchitected/latest/framework/cost-optimization.html
+
+# Amazon Redshift
+https://docs.aws.amazon.com/redshift/latest/mgmt/welcome.html
+https://docs.aws.amazon.com/redshift/latest/mgmt/serverless-whatis.html
+
+# Amazon S3
+https://docs.aws.amazon.com/AmazonS3/latest/userguide/Welcome.html
+https://docs.aws.amazon.com/AmazonS3/latest/userguide/optimizing-performance.html
+
+# AWS Glue
+https://docs.aws.amazon.com/glue/latest/dg/what-is-glue.html
+
+# Amazon Athena
+https://docs.aws.amazon.com/athena/latest/ug/what-is.html
+
+# Amazon Bedrock
+https://docs.aws.amazon.com/bedrock/latest/userguide/what-is-bedrock.html
+
+# Amazon DynamoDB
+https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html
+
+# Amazon RDS
+https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Welcome.html
+
+# AWS Lambda
+https://docs.aws.amazon.com/lambda/latest/dg/welcome.html
+
+# Amazon Kinesis
+https://docs.aws.amazon.com/streams/latest/dev/introduction.html
+
+# VPC
+https://docs.aws.amazon.com/vpc/latest/userguide/what-is-amazon-vpc.html

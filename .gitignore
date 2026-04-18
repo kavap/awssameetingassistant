@@ -1,0 +1,23 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Secrets
+.env
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Test artifacts
+data/test_audio.wav
+
+# OS
+.DS_Store
