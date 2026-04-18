@@ -15,8 +15,7 @@ from backend.agent.recommendation_agent import RecommendationAgent
 from backend.audio.capture import get_capture
 from backend.ccm.engine import CCMEngine
 from backend.config import settings
-from backend.knowledge_base import qdrant_client
-from backend.transcription.transcribe_stream import stream_transcription
+from backend.knowledge_base import bedrock_kb
 from backend.websocket.manager import manager as ws_manager
 
 logging.basicConfig(
@@ -33,10 +32,30 @@ ccm_engine = CCMEngine()
 event_queue: asyncio.Queue = asyncio.Queue(maxsize=10)
 recommendation_agent = RecommendationAgent(ws_manager, event_queue)
 
-# Per-session tracking
 _meeting_task: asyncio.Task | None = None
 _stop_event: asyncio.Event = asyncio.Event()
 _session_id: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# STT provider selection
+# ---------------------------------------------------------------------------
+
+def _get_stream_transcription_fn():
+    """Return the correct STT stream function based on STT_PROVIDER config."""
+    provider = settings.stt_provider.lower()
+    if provider == "whisper":
+        logger.info("STT provider: faster-whisper (local)")
+        from backend.transcription.whisper_stream import (
+            stream_transcription as whisper_fn,
+        )
+        return whisper_fn
+    else:
+        logger.info("STT provider: Amazon Transcribe Streaming (cloud)")
+        from backend.transcription.transcribe_stream import (
+            stream_transcription as transcribe_fn,
+        )
+        return transcribe_fn
 
 
 # ---------------------------------------------------------------------------
@@ -46,8 +65,17 @@ _session_id: str | None = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting Meeting Intelligence Assistant backend...")
-    await qdrant_client.ensure_collection()
-    logger.info(f"Qdrant collection '{settings.qdrant_collection}' ready.")
+    logger.info(f"STT provider: {settings.stt_provider}")
+
+    if bedrock_kb.is_configured():
+        logger.info(f"Bedrock KB: {settings.bedrock_kb_id} ({settings.bedrock_kb_search_type} search)")
+    else:
+        logger.warning(
+            "BEDROCK_KB_ID not set — recommendations will be skipped. "
+            "Run scripts/setup_kb.py or create a KB in the AWS console, "
+            "then set BEDROCK_KB_ID in .env."
+        )
+
     recommendation_agent.start()
     yield
     recommendation_agent.stop()
@@ -82,17 +110,11 @@ app.add_middleware(
 
 @app.get("/health")
 async def health():
-    qdrant_ok = False
-    try:
-        client = qdrant_client.get_client()
-        await client.get_collection(settings.qdrant_collection)
-        qdrant_ok = True
-    except Exception:
-        pass
-
     return {
         "status": "ok",
-        "qdrant": qdrant_ok,
+        "stt_provider": settings.stt_provider,
+        "bedrock_kb_configured": bedrock_kb.is_configured(),
+        "bedrock_kb_id": settings.bedrock_kb_id or None,
         "ws_clients": ws_manager.connection_count,
         "session_id": _session_id,
     }
@@ -119,9 +141,10 @@ async def start_meeting(source: str = "auto", wav_path: str | None = None):
 
     capture = get_capture(wav_path)
     audio_gen = capture.audio_generator()
+    stream_fn = _get_stream_transcription_fn()
 
     async def run_pipeline():
-        await stream_transcription(
+        await stream_fn(
             audio_gen=audio_gen,
             ccm_engine=ccm_engine,
             ws_manager=ws_manager,
@@ -134,11 +157,11 @@ async def start_meeting(source: str = "auto", wav_path: str | None = None):
     await ws_manager.broadcast({
         "type": "meeting_started",
         "ts": time.time(),
-        "payload": {"session_id": _session_id},
+        "payload": {"session_id": _session_id, "stt_provider": settings.stt_provider},
     })
 
-    logger.info(f"Meeting started. Session: {_session_id}")
-    return {"session_id": _session_id, "status": "started"}
+    logger.info(f"Meeting started. Session: {_session_id}, STT: {settings.stt_provider}")
+    return {"session_id": _session_id, "status": "started", "stt_provider": settings.stt_provider}
 
 
 @app.post("/meeting/stop")
@@ -190,7 +213,6 @@ async def manual_ask(body: dict):
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await ws_manager.connect(websocket)
-    # Send current state on connect
     await websocket.send_json({
         "type": "ccm_update",
         "ts": time.time(),
@@ -198,7 +220,6 @@ async def websocket_endpoint(websocket: WebSocket):
     })
     try:
         while True:
-            # Keep connection alive; receive any client messages (future use)
             data = await websocket.receive_text()
             logger.debug(f"WS client message: {data[:100]}")
     except WebSocketDisconnect:

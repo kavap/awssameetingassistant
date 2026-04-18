@@ -1,9 +1,10 @@
 """Recommendation Agent.
 
-Consumes CCMUpdateEvents from a bounded queue, searches the KB,
-reranks with Haiku, synthesizes with Sonnet, broadcasts to WebSocket.
+Consumes CCMUpdateEvents from a bounded queue, queries Bedrock Knowledge Base,
+reranks with Claude Haiku, synthesizes a card with Claude Sonnet, broadcasts to WebSocket.
 
-All boto3 calls run in executor to avoid blocking the event loop.
+Bedrock KB handles embedding (Cohere v3) and hybrid search internally —
+no manual embedding needed at query time.
 """
 from __future__ import annotations
 
@@ -18,22 +19,21 @@ import boto3
 
 from backend.ccm.models import CCMUpdateEvent
 from backend.config import settings
-from backend.knowledge_base import embeddings, qdrant_client
+from backend.knowledge_base import bedrock_kb
 
 logger = logging.getLogger(__name__)
 
 _bedrock = boto3.client("bedrock-runtime", region_name=settings.aws_region)
 
-# Cooldown: don't re-trigger for the same primary topic within N seconds
 COOLDOWN_SECONDS = 20
 
 
-def _invoke_bedrock_sync(model_id: str, prompt_messages: list[dict], max_tokens: int = 1024) -> str:
-    """Synchronous Bedrock invoke — always run via executor."""
+def _invoke_bedrock_sync(model_id: str, messages: list[dict], max_tokens: int = 1024) -> str:
+    """Synchronous Bedrock Claude invoke — always run via executor."""
     body = json.dumps({
         "anthropic_version": "bedrock-2023-05-31",
         "max_tokens": max_tokens,
-        "messages": prompt_messages,
+        "messages": messages,
     })
     response = _bedrock.invoke_model(
         modelId=model_id,
@@ -53,25 +53,21 @@ async def _invoke_bedrock(model_id: str, messages: list[dict], max_tokens: int =
 
 
 def _build_search_query(event: CCMUpdateEvent) -> str:
-    """Build a natural language search query from the CCM context."""
+    """Build a focused natural language query from CCM state for KB retrieval."""
     ctx = event.context_snapshot
     parts = []
 
-    # Add top active topic
     topics = ctx.get("active_topics", [])
     if topics:
-        top = topics[0]
-        parts.append(top["name"].replace("_", " "))
+        parts.append(topics[0]["name"].replace("_", " "))
 
-    # Add mentioned AWS services
-    services = [
+    aws_svcs = [
         name for name, svc in ctx.get("mentioned_services", {}).items()
         if svc["category"] == "aws"
     ]
-    if services:
-        parts.append(" ".join(services[:3]))
+    if aws_svcs:
+        parts.append(" ".join(aws_svcs[:3]))
 
-    # Add competitor services for comparison queries
     competitors = [
         name for name, svc in ctx.get("mentioned_services", {}).items()
         if svc["category"] == "competitor"
@@ -79,33 +75,29 @@ def _build_search_query(event: CCMUpdateEvent) -> str:
     if competitors:
         parts.append("vs " + " ".join(competitors[:2]))
 
-    # Add trigger text excerpt
     parts.append(event.trigger_text[:100])
 
     return " ".join(parts)[:300]
 
 
 async def _rerank_chunks(chunks: list[dict], context: str, query: str) -> list[dict]:
-    """Use Haiku to select the top 3 most relevant chunks."""
+    """Use Claude Haiku to pick the top 3 most relevant chunks."""
     if len(chunks) <= 3:
         return chunks
 
     chunks_text = "\n\n".join(
-        f"[{i}] {c['title'] or c['url']}\n{c['text'][:300]}"
+        f"[{i}] {c.get('title') or c.get('url', '')}\n{c['text'][:300]}"
         for i, c in enumerate(chunks)
     )
-    prompt = f"""You are helping an AWS Solutions Architect in a live meeting.
-
-Meeting context: {context[:400]}
-Query: {query}
-
-Given these {len(chunks)} document chunks, return ONLY a JSON array of the 3 most relevant chunk indices (0-based), most relevant first. Example: [2, 0, 4]
-
-Chunks:
-{chunks_text}
-
-Return only the JSON array, nothing else."""
-
+    prompt = (
+        f"You are helping an AWS Solutions Architect in a live meeting.\n\n"
+        f"Meeting context: {context[:400]}\n"
+        f"Query: {query}\n\n"
+        f"Given these {len(chunks)} document chunks, return ONLY a JSON array of the 3 "
+        f"most relevant chunk indices (0-based), most relevant first. Example: [2, 0, 4]\n\n"
+        f"Chunks:\n{chunks_text}\n\n"
+        f"Return only the JSON array, nothing else."
+    )
     try:
         response = await _invoke_bedrock(
             settings.bedrock_haiku_model,
@@ -115,7 +107,7 @@ Return only the JSON array, nothing else."""
         indices = json.loads(response.strip())
         return [chunks[i] for i in indices if 0 <= i < len(chunks)]
     except Exception as e:
-        logger.warning(f"Rerank failed: {e}. Using top 3 by score.")
+        logger.warning(f"Rerank failed ({e}), using top 3 by score.")
         return chunks[:3]
 
 
@@ -124,34 +116,28 @@ async def _synthesize_recommendation(
     context: str,
     trigger_text: str,
 ) -> dict:
-    """Use Sonnet to synthesize a recommendation card from retrieved chunks."""
-    chunks_context = "\n\n".join(
-        f"Source: {c['url']}\nTitle: {c['title']}\n{c['text'][:500]}"
+    """Use Claude Sonnet to synthesize a structured recommendation card."""
+    grounding = "\n\n".join(
+        f"Source: {c.get('url', '')}\nTitle: {c.get('title', '')}\n{c['text'][:500]}"
         for c in chunks
     )
-
-    prompt = f"""You are a real-time AI assistant helping an AWS Solutions Architect during a live customer meeting.
-
-Current meeting context:
-{context[:600]}
-
-What was just discussed: {trigger_text[:200]}
-
-Relevant AWS documentation and knowledge:
-{chunks_context}
-
-Based on this information, generate a proactive recommendation card for the SA. Return ONLY valid JSON in this exact format:
-{{
-  "title": "brief title (max 10 words)",
-  "summary": "1-2 sentence answer or recommendation directly addressing the meeting context",
-  "service_mentioned": ["list", "of", "aws", "services"],
-  "action_items": ["specific action or talking point 1", "action 2", "action 3"],
-  "source_urls": ["url1", "url2"],
-  "confidence": 0.85
-}}
-
-Be specific, actionable, and relevant to what is being discussed right now. Do not include markdown formatting."""
-
+    prompt = (
+        "You are a real-time AI assistant helping an AWS Solutions Architect "
+        "during a live customer meeting.\n\n"
+        f"Current meeting context:\n{context[:600]}\n\n"
+        f"What was just discussed: {trigger_text[:200]}\n\n"
+        f"Relevant AWS knowledge:\n{grounding}\n\n"
+        "Generate a proactive recommendation card. Return ONLY valid JSON:\n"
+        "{\n"
+        '  "title": "brief title (max 10 words)",\n'
+        '  "summary": "1-2 sentence answer directly addressing the meeting context",\n'
+        '  "service_mentioned": ["list", "of", "aws", "services"],\n'
+        '  "action_items": ["talking point 1", "point 2", "point 3"],\n'
+        '  "source_urls": ["url1", "url2"],\n'
+        '  "confidence": 0.85\n'
+        "}\n\n"
+        "Be specific, actionable, relevant to right now. No markdown formatting."
+    )
     try:
         response = await _invoke_bedrock(
             settings.bedrock_sonnet_model,
@@ -170,19 +156,19 @@ Be specific, actionable, and relevant to what is being discussed right now. Do n
             "summary": f"Related to: {trigger_text[:100]}",
             "service_mentioned": [],
             "action_items": [],
-            "source_urls": [c["url"] for c in chunks[:2]],
+            "source_urls": [c.get("url", "") for c in chunks[:2]],
             "confidence": 0.3,
             "trigger": trigger_text[:100],
         }
 
 
 class RecommendationAgent:
-    """Consumes CCMUpdateEvents and emits recommendation cards over WebSocket."""
+    """Consumes CCMUpdateEvents → Bedrock KB → Haiku rerank → Sonnet card → WebSocket."""
 
     def __init__(self, ws_manager, event_queue: asyncio.Queue) -> None:
         self._ws = ws_manager
         self._queue = event_queue
-        self._last_trigger: dict[str, float] = {}  # topic -> last trigger time
+        self._last_trigger: dict[str, float] = {}
         self._running = False
         self._task: asyncio.Task | None = None
 
@@ -206,7 +192,6 @@ class RecommendationAgent:
                 continue
             except asyncio.CancelledError:
                 break
-
             await self._process_event(event)
 
     async def _process_event(self, event: CCMUpdateEvent) -> None:
@@ -214,7 +199,6 @@ class RecommendationAgent:
         topics = ctx.get("active_topics", [])
         topic_key = topics[0]["name"] if topics else "general"
 
-        # Cooldown check
         last = self._last_trigger.get(topic_key, 0)
         if time.time() - last < COOLDOWN_SECONDS:
             logger.debug(f"Cooldown active for topic: {topic_key}")
@@ -222,38 +206,32 @@ class RecommendationAgent:
 
         self._last_trigger[topic_key] = time.time()
 
+        if not bedrock_kb.is_configured():
+            logger.warning(
+                "Bedrock KB not configured (BEDROCK_KB_ID not set). "
+                "Skipping recommendation. Set BEDROCK_KB_ID in .env after KB setup."
+            )
+            return
+
         try:
             query = _build_search_query(event)
-            logger.info(f"KB search: {query[:80]}")
+            logger.info(f"KB retrieve: {query[:80]}")
 
-            # Embed query
-            dense_vec = await embeddings.embed(query)
-            sparse_vec = qdrant_client.compute_sparse_vector(query)
-
-            # Hybrid search
-            chunks = await qdrant_client.hybrid_search(
-                dense_vec=dense_vec,
-                sparse_vec=sparse_vec,
-                limit=8,
-            )
+            # Retrieve from Bedrock KB — embedding handled by KB internally
+            chunks = await bedrock_kb.retrieve(query)
 
             if not chunks:
-                logger.info("No KB results found.")
+                logger.info("No KB results returned.")
                 return
 
-            # Rerank with Haiku
             context_str = (
                 f"Topics: {', '.join(t['name'] for t in topics[:3])}\n"
                 f"Services: {', '.join(ctx.get('mentioned_services', {}).keys())}"
             )
+
             top_chunks = await _rerank_chunks(chunks, context_str, query)
+            card = await _synthesize_recommendation(top_chunks, context_str, event.trigger_text)
 
-            # Synthesize with Sonnet
-            card = await _synthesize_recommendation(
-                top_chunks, context_str, event.trigger_text
-            )
-
-            # Broadcast
             await self._ws.broadcast({
                 "type": "recommendation",
                 "ts": time.time(),

@@ -11,22 +11,33 @@ class Settings(BaseSettings):
     # AWS
     aws_region: str = "us-east-1"
 
-    # Bedrock models
-    bedrock_embedding_model: str = "amazon.titan-embed-text-v2:0"
+    # Bedrock LLM models
     bedrock_haiku_model: str = "anthropic.claude-3-5-haiku-20241022-v1:0"
     bedrock_sonnet_model: str = "anthropic.claude-3-7-sonnet-20250219-v1:0"
+
+    # Bedrock embedding — Cohere embed v3 (1024 dims)
+    bedrock_embedding_model: str = "cohere.embed-english-v3"
+
+    # Bedrock Knowledge Base
+    bedrock_kb_id: str = ""                  # set after creating KB in AWS console
+    bedrock_kb_data_source_id: str = ""      # set after creating the S3 data source
+    bedrock_kb_s3_bucket: str = ""           # S3 bucket for KB document storage
+    bedrock_kb_search_type: str = "HYBRID"   # HYBRID | SEMANTIC | KEYWORD
+    bedrock_kb_num_results: int = 8
 
     # Transcribe
     transcribe_region: str = "us-east-1"
     transcribe_language: str = "en-US"
 
-    # Qdrant
-    qdrant_host: str = "localhost"
-    qdrant_port: int = 6333
-    qdrant_collection: str = "aws_kb"
+    # STT provider: "transcribe" (default, cloud) or "whisper" (local, Mac-friendly)
+    stt_provider: str = "transcribe"
 
-    # Vector
-    vector_size: int = 1024
+    # Whisper (local STT — used when stt_provider=whisper)
+    whisper_model: str = "large-v3-turbo"   # large-v3-turbo | large-v3 | medium | small
+    whisper_device: str = "cpu"             # cpu | cuda | mps (Apple Silicon)
+    whisper_compute_type: str = "int8"      # int8 | float16 | float32
+    whisper_buffer_seconds: float = 4.0     # audio buffer before each transcription pass
+    whisper_language: str = "en"
 
     # Audio
     audio_sample_rate: int = 16000
