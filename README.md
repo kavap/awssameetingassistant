@@ -10,27 +10,30 @@ A real-time AI assistant that listens to live AWS customer and internal meetings
 Microphone / System Audio
          │
          ▼
-Amazon Transcribe Streaming  (ultra-low latency STT, partial results)
+STT Engine (choose one):
+  ├─ Amazon Transcribe Streaming  (cloud, best accuracy, partial results)
+  └─ faster-whisper large-v3-turbo (local, offline, privacy-first, Mac-friendly)
          │
          ▼
 Conversation Context Map Engine  (detects AWS services, open questions, topics)
          │
          ▼
 RecommendationAgent
-   ├─ Bedrock Titan Embed v2  (query embedding)
-   ├─ Qdrant Hybrid Search    (KNN dense + BM25 sparse, RRF fusion)
-   ├─ Claude Haiku            (rerank top results)
-   └─ Claude Sonnet           (synthesize recommendation card)
+   ├─ Bedrock Knowledge Base      (managed vector store, serverless)
+   │   └─ Cohere Embed English v3 (1024-dim embeddings, configured on KB)
+   │   └─ Hybrid search           (semantic + keyword, RRF fusion)
+   ├─ Claude Haiku                (rerank top results)
+   └─ Claude Sonnet               (synthesize recommendation card)
          │
          ▼
 WebSocket → React Frontend  (live transcript + recommendation cards)
 ```
 
 **Key design decisions:**
-- Knowledge base is populated **offline** — no live web scraping during meetings
-- Hybrid search (dense + sparse) delivers results in <200ms
-- Multi-source, configurable knowledge ingestion pipeline
-- All AWS calls use the instance IAM role or local AWS credentials (no hardcoded secrets)
+- Knowledge base populated **offline** via S3 → Bedrock KB sync — no live scraping during meetings
+- Bedrock KB handles embedding (Cohere) and hybrid search internally — no self-managed vector store
+- STT is configurable: cloud Transcribe for best accuracy or local Whisper for privacy/offline use
+- All AWS calls use the instance IAM role or local credentials (no hardcoded secrets)
 
 ---
 
@@ -41,53 +44,87 @@ WebSocket → React Frontend  (live transcript + recommendation cards)
 | Python | ≥ 3.12 | |
 | uv | ≥ 0.11 | [install](https://docs.astral.sh/uv/getting-started/installation/) |
 | Node.js | ≥ 18 | For the React frontend |
-| Docker | any | For running Qdrant |
-| AWS access | — | Bedrock + Transcribe permissions required |
+| AWS access | — | Bedrock + Bedrock KB + optionally Transcribe |
 
 ### Required AWS IAM Permissions
 
-Your IAM role/user needs:
 ```json
 {
   "Effect": "Allow",
   "Action": [
     "bedrock:InvokeModel",
+    "bedrock-agent-runtime:Retrieve",
+    "bedrock-agent:StartIngestionJob",
+    "s3:PutObject", "s3:GetObject", "s3:ListBucket",
     "transcribe:StartStreamTranscription"
   ],
   "Resource": "*"
 }
 ```
 
+> `transcribe:StartStreamTranscription` is only needed when `STT_PROVIDER=transcribe`.
+
 ### Required Bedrock Model Access
 
-Enable the following models in **Amazon Bedrock → Model access** (us-east-1):
-- `amazon.titan-embed-text-v2:0`
-- `anthropic.claude-3-5-haiku-20241022-v1:0`
-- `anthropic.claude-3-7-sonnet-20250219-v1:0`
+Enable in **AWS Console → Bedrock → Model access** (us-east-1):
+- `cohere.embed-english-v3` — embeddings for the knowledge base
+- `anthropic.claude-3-5-haiku-20241022-v1:0` — reranking
+- `anthropic.claude-3-7-sonnet-20250219-v1:0` — recommendation synthesis
+
+---
+
+## Step 0: Create the Bedrock Knowledge Base (one-time)
+
+Before running the assistant, you need a Bedrock Knowledge Base backed by S3.
+
+### Option A — Automated (recommended)
+
+```bash
+git clone https://github.com/kavap/awssameetingassistant.git
+cd awssameetingassistant
+uv sync
+uv run python scripts/setup_kb.py
+```
+
+This creates:
+1. An S3 bucket for document storage
+2. An IAM execution role for Bedrock KB
+3. A Bedrock Knowledge Base configured with **Cohere Embed English v3**
+4. An S3 data source attached to the KB
+
+At the end it prints the three values to add to your `.env`:
+```
+BEDROCK_KB_S3_BUCKET=meeting-assistant-kb-XXXXXXXX-prod
+BEDROCK_KB_ID=ABCD1234EF
+BEDROCK_KB_DATA_SOURCE_ID=XY1234ABCD
+```
+
+### Option B — AWS Console (manual)
+
+1. **AWS Console → Bedrock → Knowledge Bases → Create**
+2. Embedding model: **Cohere Embed English v3**
+3. Vector store: **Amazon OpenSearch Serverless** (auto-provisioned)
+4. Data source: **Amazon S3** → create a new bucket
+5. Chunking strategy: **No chunking** (ingest.py chunks documents itself)
+6. Copy the **Knowledge Base ID** and **Data Source ID** into `.env`
 
 ---
 
 ## Option A: Deploy on AWS (Cloud VM / EC2)
 
-This is the recommended path for a persistent always-on deployment, or when running on a cloud development environment (e.g., AWS Cloud9, SageMaker Studio, EC2).
+Recommended for persistent always-on deployment or cloud dev environments (Cloud9, SageMaker Studio, EC2).
 
 ### 1. Launch an EC2 Instance
 
-Recommended: **t3.medium** or larger, **Amazon Linux 2023** or **Ubuntu 22.04**, in `us-east-1`.
-
-Attach an IAM instance profile with the permissions listed above.
+Recommended: **t3.medium** or larger, **Amazon Linux 2023** or **Ubuntu 22.04**, `us-east-1`.
+Attach an IAM instance profile with the permissions above.
 
 ### 2. Install System Dependencies
 
 **Amazon Linux 2023:**
 ```bash
 sudo dnf update -y
-sudo dnf install -y git nodejs npm docker
-sudo systemctl start docker
-sudo usermod -aG docker $USER
-newgrp docker
-
-# Install uv
+sudo dnf install -y git nodejs npm
 curl -LsSf https://astral.sh/uv/install.sh | sh
 source $HOME/.local/bin/env
 ```
@@ -95,11 +132,7 @@ source $HOME/.local/bin/env
 **Ubuntu 22.04:**
 ```bash
 sudo apt update && sudo apt upgrade -y
-sudo apt install -y git nodejs npm docker.io libportaudio2
-sudo systemctl start docker
-sudo usermod -aG docker $USER
-newgrp docker
-
+sudo apt install -y git nodejs npm
 curl -LsSf https://astral.sh/uv/install.sh | sh
 source $HOME/.local/bin/env
 ```
@@ -109,10 +142,16 @@ source $HOME/.local/bin/env
 ```bash
 git clone https://github.com/kavap/awssameetingassistant.git
 cd awssameetingassistant
-
 cp .env.example .env
-# Edit .env if needed — defaults work for us-east-1
-# Set USE_FAKE_AUDIO=true if no physical microphone is attached to the VM
+```
+
+Edit `.env` and fill in the KB values from Step 0:
+```bash
+BEDROCK_KB_S3_BUCKET=meeting-assistant-kb-XXXXXXXX-prod
+BEDROCK_KB_ID=ABCD1234EF
+BEDROCK_KB_DATA_SOURCE_ID=XY1234ABCD
+STT_PROVIDER=transcribe      # use transcribe on EC2
+USE_FAKE_AUDIO=true          # no physical mic on a cloud VM
 ```
 
 ### 4. Install Python Dependencies
@@ -121,38 +160,24 @@ cp .env.example .env
 uv sync
 ```
 
-### 5. Start Qdrant
+### 5. Seed the Knowledge Base
 
-```bash
-docker run -d --name meeting-assistant-qdrant \
-  -p 6333:6333 -p 6334:6334 \
-  -v qdrant_storage:/qdrant/storage \
-  --restart unless-stopped \
-  qdrant/qdrant:latest
-```
-
-Wait for it to be healthy:
-```bash
-curl http://localhost:6333/healthz
-# Expected: healthz check passed
-```
-
-### 6. Seed the Knowledge Base
-
-This step fetches and indexes AWS documentation into Qdrant. Run once, then re-run to refresh.
+Fetches AWS docs, uploads chunked text to S3, and triggers a Bedrock KB sync job.
 
 ```bash
 uv run python scripts/ingest.py --urls data/urls.txt
 ```
 
-Expected output: ~200–400 chunks indexed across 20+ AWS doc pages (takes 3–8 minutes depending on Bedrock rate limits).
+Monitor the sync job: **AWS Console → Bedrock → Knowledge Bases → your KB → Data Sources → Sync history**
 
-To reset and re-index from scratch:
+To re-upload and re-sync at any time:
 ```bash
-uv run python scripts/ingest.py --urls data/urls.txt --reset
+uv run python scripts/ingest.py --urls data/urls.txt
+# or just trigger a sync without re-uploading:
+uv run python scripts/ingest.py --sync-only
 ```
 
-### 7. Start the Backend
+### 6. Start the Backend
 
 ```bash
 uv run uvicorn backend.main:app --host 0.0.0.0 --port 8000
@@ -161,65 +186,63 @@ uv run uvicorn backend.main:app --host 0.0.0.0 --port 8000
 Verify:
 ```bash
 curl http://localhost:8000/health
-# Expected: {"status":"ok","qdrant":true,...}
+# Expected: {"status":"ok","bedrock_kb_configured":true,"stt_provider":"transcribe",...}
 ```
 
-### 8. Start the Frontend
+### 7. Start the Frontend
 
 ```bash
-cd frontend
-npm install
-npm run dev
+cd frontend && npm install && npm run dev
 ```
 
-The UI is now available at **http://localhost:5173** (or the EC2 public IP if you opened port 5173 in the security group).
+Open **http://localhost:5173** (open port 5173 in the EC2 security group, or use an SSH tunnel).
 
-> **Security note:** For production, put a reverse proxy (nginx) in front and restrict access. Port 5173 should not be publicly open without authentication.
+> **Security note:** For production, put nginx in front and restrict access. Do not expose 5173 publicly without authentication.
 
-### 9. Use the Assistant
+### 8. Use the Assistant
 
 1. Open the UI in your browser
 2. Click **Start Meeting**
-3. Speak into the microphone (or set `USE_FAKE_AUDIO=true` with a test WAV file)
-4. Watch the transcript and recommendation cards appear in real-time
-5. Type a question in the **Ask** box to manually trigger a recommendation
+3. Speak into the microphone (or use `USE_FAKE_AUDIO=true` with a test WAV on a VM)
+4. Watch transcript and recommendation cards appear in real-time
+5. Type in the **Ask** box to manually trigger a recommendation
 6. Click **Stop** when the meeting ends
 
 ---
 
 ## Option B: Deploy on MacBook (Local)
 
-This option runs everything locally. The only AWS services used are Amazon Bedrock and Amazon Transcribe Streaming — both accessed via your local AWS credentials.
+Two STT options are available on Mac. Use whichever suits your setup.
+
+| | Amazon Transcribe | Whisper (local) |
+|---|---|---|
+| Accuracy | Excellent, partial results | Very good, final results only |
+| Latency | ~1s (streaming) | ~4s (per buffer) |
+| Privacy | Audio sent to AWS | Fully on-device |
+| Internet | Required | Not required for STT |
+| Setup | AWS credentials only | `uv sync --extra whisper` |
+| Apple Silicon | — | `WHISPER_DEVICE=mps` (fast) |
 
 ### 1. Install Prerequisites
-
-Using [Homebrew](https://brew.sh):
 
 ```bash
 # Homebrew (if not installed)
 /bin/bash -c "$(curl -fsSF https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
-# Dependencies
-brew install git node docker portaudio
-
-# uv package manager
+brew install git node portaudio awscli
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-Open **Docker Desktop** and ensure it is running before proceeding.
+Open **Docker Desktop** — not needed for the KB (Bedrock KB is serverless), but required if you run any local services.
 
 ### 2. Configure AWS Credentials
 
-The app uses standard AWS credential resolution. Choose one:
-
-**Option 1 — AWS CLI profile (recommended for personal accounts):**
 ```bash
-brew install awscli
 aws configure
 # Enter: Access Key ID, Secret Access Key, region (us-east-1), output (json)
 ```
 
-**Option 2 — AWS SSO (for corporate/federated accounts):**
+For SSO / federated accounts:
 ```bash
 aws configure sso
 aws sso login --profile your-profile-name
@@ -229,8 +252,9 @@ export AWS_PROFILE=your-profile-name
 Verify Bedrock access:
 ```bash
 aws bedrock list-foundation-models --region us-east-1 \
-  --query 'modelSummaries[?contains(modelId,`titan-embed`)].modelId' \
+  --query 'modelSummaries[?contains(modelId,`cohere.embed`)].modelId' \
   --output text
+# Expected: cohere.embed-english-v3
 ```
 
 ### 3. Clone and Configure
@@ -238,74 +262,72 @@ aws bedrock list-foundation-models --region us-east-1 \
 ```bash
 git clone https://github.com/kavap/awssameetingassistant.git
 cd awssameetingassistant
-
 cp .env.example .env
-# Defaults work for MacBook with a microphone — no changes needed
-# USE_FAKE_AUDIO=false (default) uses your Mac's built-in microphone
+```
+
+Set the KB values from Step 0, then choose your STT provider:
+
+**Using Amazon Transcribe (cloud STT):**
+```bash
+STT_PROVIDER=transcribe
+```
+
+**Using Whisper (local, offline STT):**
+```bash
+STT_PROVIDER=whisper
+WHISPER_MODEL=large-v3-turbo
+WHISPER_DEVICE=mps        # Apple Silicon GPU — use "cpu" for Intel Mac
+WHISPER_COMPUTE_TYPE=int8
 ```
 
 ### 4. Install Python Dependencies
 
+**Transcribe only:**
 ```bash
 uv sync
 ```
 
+**With Whisper (local STT):**
+```bash
+uv sync --extra whisper
+```
+
+> First run with Whisper will download the `large-v3-turbo` model (~800MB) from HuggingFace. Subsequent starts are instant.
+
 If sounddevice cannot find PortAudio:
 ```bash
-brew install portaudio
-uv sync --reinstall-package sounddevice
+brew install portaudio && uv sync --reinstall-package sounddevice
 ```
 
-### 5. Start Qdrant
-
-```bash
-docker run -d --name meeting-assistant-qdrant \
-  -p 6333:6333 \
-  -v qdrant_storage:/qdrant/storage \
-  --restart unless-stopped \
-  qdrant/qdrant:latest
-
-curl http://localhost:6333/healthz
-# Expected: healthz check passed
-```
-
-### 6. Seed the Knowledge Base
+### 5. Seed the Knowledge Base
 
 ```bash
 uv run python scripts/ingest.py --urls data/urls.txt
 ```
 
-### 7. Start the Backend
+### 6. Start the Backend
 
 ```bash
 uv run uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### 8. Start the Frontend
+### 7. Start the Frontend
 
-In a new terminal tab:
 ```bash
-cd frontend
-npm install
-npm run dev
+cd frontend && npm install && npm run dev
 ```
 
-Open **http://localhost:5173** in your browser.
+Open **http://localhost:5173**.
 
-### 9. Grant Microphone Permission on macOS
+### 8. Grant Microphone Permission on macOS
 
-On first use, macOS will prompt for microphone access. If it doesn't:
+**System Settings → Privacy & Security → Microphone** → enable for Terminal (or iTerm2/Warp).
 
-1. **System Settings → Privacy & Security → Microphone**
-2. Enable access for **Terminal** (or iTerm2, Warp, or whatever terminal you use)
-
-### 10. Use the Assistant
+### 9. Use the Assistant
 
 1. Join a Zoom / Teams / Google Meet call on your Mac
-2. Open **http://localhost:5173**
-3. Click **Start Meeting**
-4. The assistant captures audio from your microphone
-5. Watch transcript and recommendation cards populate in real-time
+2. Open **http://localhost:5173** and click **Start Meeting**
+3. Watch transcript and recommendations appear
 
 **Capture both sides of the call (recommended):**
 
@@ -314,35 +336,38 @@ Install [BlackHole](https://existential.audio/blackhole/) (free virtual audio dr
 brew install --cask blackhole-2ch
 ```
 
-Then in **Audio MIDI Setup** (Applications → Utilities):
-1. Click `+` → **Create Multi-Output Device**
-2. Add: **BlackHole 2ch** + your speakers/headphones
-3. Set this Multi-Output Device as your system audio output in System Settings
-4. In the meeting app (Zoom/Teams), set the microphone input to **BlackHole 2ch**
+In **Audio MIDI Setup** (Applications → Utilities):
+1. `+` → **Create Multi-Output Device**
+2. Add **BlackHole 2ch** + your speakers/headphones
+3. Set as system audio output in System Settings
+4. In Zoom/Teams, set microphone input to **BlackHole 2ch**
 
-This routes the full meeting audio through BlackHole so the assistant hears all participants. Phase 2 will add a dedicated `AUDIO_DEVICE_NAME` config option; for now, use the default mic which captures ambient audio adequately in a quiet room.
+This routes all meeting audio through BlackHole so the assistant hears every participant.
 
 ---
 
 ## Adding Custom Knowledge Sources
 
-Edit `data/urls.txt` — add any publicly accessible URL (AWS docs, AWS blogs, re:Post, partner docs):
+Edit `data/urls.txt` — any publicly accessible URL works:
 
 ```text
-# Additional AWS services
-https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/best-practices.html
+# AWS docs and blogs
+https://docs.aws.amazon.com/redshift/latest/mgmt/serverless-whatis.html
 https://aws.amazon.com/blogs/big-data/top-10-performance-tuning-tips-for-amazon-redshift/
 https://repost.aws/knowledge-center/redshift-serverless-pricing
 
-# Your internal wiki (if accessible from where you run the assistant)
+# Internal wiki (if accessible from where you run ingest.py)
 https://wiki.internal.company.com/aws-standards
 ```
 
-Re-run ingestion:
+Re-run ingestion to upload new content and trigger a KB sync:
 ```bash
 uv run python scripts/ingest.py --urls data/urls.txt
-# Reset and re-index everything:
-uv run python scripts/ingest.py --urls data/urls.txt --reset
+```
+
+To trigger a sync without re-uploading (e.g., after a manual S3 upload):
+```bash
+uv run python scripts/ingest.py --sync-only
 ```
 
 ---
@@ -352,33 +377,34 @@ uv run python scripts/ingest.py --urls data/urls.txt --reset
 ```
 awssameetingassistant/
 ├── backend/
-│   ├── main.py                    # FastAPI app + WebSocket + REST endpoints
-│   ├── config.py                  # All config via .env (pydantic-settings)
-│   ├── audio/capture.py           # Mic capture, fake audio, silence fallback
+│   ├── main.py                      # FastAPI app, WebSocket, REST endpoints
+│   ├── config.py                    # All config via .env (pydantic-settings)
+│   ├── audio/capture.py             # Mic, fake audio, silence fallback
 │   ├── ccm/
-│   │   ├── engine.py              # Conversation Context Map engine (<10ms/call)
-│   │   └── models.py              # CCMState, CCMUpdateEvent dataclasses
+│   │   ├── engine.py                # Conversation Context Map (<10ms/call)
+│   │   └── models.py                # CCMState, CCMUpdateEvent dataclasses
 │   ├── knowledge_base/
-│   │   ├── qdrant_client.py       # Hybrid search (KNN + BM25 RRF fusion)
-│   │   └── embeddings.py          # Bedrock Titan Embeddings v2 wrapper
+│   │   ├── bedrock_kb.py            # Bedrock KB retrieval (bedrock-agent-runtime)
+│   │   └── embeddings.py            # Cohere Embed English v3 wrapper (for ingestion)
 │   ├── transcription/
-│   │   └── transcribe_stream.py   # Amazon Transcribe Streaming pipeline
+│   │   ├── transcribe_stream.py     # Amazon Transcribe Streaming (STT_PROVIDER=transcribe)
+│   │   └── whisper_stream.py        # faster-whisper local STT (STT_PROVIDER=whisper)
 │   ├── agent/
-│   │   └── recommendation_agent.py # Haiku rerank → Sonnet synthesis
-│   └── websocket/manager.py       # WebSocket broadcast manager
+│   │   └── recommendation_agent.py  # KB retrieve → Haiku rerank → Sonnet synthesis
+│   └── websocket/manager.py         # WebSocket broadcast manager
 ├── scripts/
-│   └── ingest.py                  # KB ingestion CLI
-├── frontend/
-│   └── src/
-│       ├── App.tsx                # Two-panel layout (transcript + recommendations)
-│       ├── store/meetingStore.ts  # Zustand state
-│       ├── hooks/useWebSocket.ts  # WS connection with auto-reconnect
-│       └── components/            # TranscriptPanel, RecommendationCard, etc.
+│   ├── setup_kb.py                  # One-time: create S3 + IAM role + Bedrock KB
+│   └── ingest.py                    # Upload docs to S3 + trigger KB sync
+├── frontend/src/
+│   ├── App.tsx                      # Two-panel layout
+│   ├── store/meetingStore.ts        # Zustand state
+│   ├── hooks/useWebSocket.ts        # WS with auto-reconnect
+│   └── components/                  # TranscriptPanel, RecommendationCard, etc.
 ├── data/
-│   └── urls.txt                   # Knowledge source URLs (edit to add more)
-├── tests/                         # 12 unit + integration tests
-├── .env.example                   # Environment variable template
-└── docker-compose.yml             # Qdrant service definition
+│   └── urls.txt                     # Knowledge source URLs
+├── tests/                           # 15 unit tests (all passing)
+├── .env.example                     # All config variables documented
+└── docker-compose.yml               # Optional: local services reference
 ```
 
 ---
@@ -388,28 +414,34 @@ awssameetingassistant/
 | Variable | Default | Description |
 |---|---|---|
 | `AWS_REGION` | `us-east-1` | AWS region for all services |
-| `BEDROCK_EMBEDDING_MODEL` | `amazon.titan-embed-text-v2:0` | Embedding model ID |
-| `BEDROCK_HAIKU_MODEL` | `anthropic.claude-3-5-haiku-20241022-v1:0` | Fast reranking model |
-| `BEDROCK_SONNET_MODEL` | `anthropic.claude-3-7-sonnet-20250219-v1:0` | Synthesis model |
-| `TRANSCRIBE_LANGUAGE` | `en-US` | Meeting language code |
-| `QDRANT_HOST` | `localhost` | Qdrant host |
-| `QDRANT_COLLECTION` | `aws_kb` | Vector collection name |
+| `BEDROCK_EMBEDDING_MODEL` | `cohere.embed-english-v3` | Cohere embedding model |
+| `BEDROCK_HAIKU_MODEL` | `claude-3-5-haiku-20241022-v1:0` | Fast reranking model |
+| `BEDROCK_SONNET_MODEL` | `claude-3-7-sonnet-20250219-v1:0` | Synthesis model |
+| `BEDROCK_KB_ID` | *(required)* | Bedrock KB ID from setup_kb.py |
+| `BEDROCK_KB_S3_BUCKET` | *(required)* | S3 bucket for KB documents |
+| `BEDROCK_KB_DATA_SOURCE_ID` | *(required)* | KB data source ID |
+| `BEDROCK_KB_SEARCH_TYPE` | `HYBRID` | `HYBRID` / `SEMANTIC` / `KEYWORD` |
+| `STT_PROVIDER` | `transcribe` | `transcribe` or `whisper` |
+| `WHISPER_MODEL` | `large-v3-turbo` | Whisper model size |
+| `WHISPER_DEVICE` | `cpu` | `cpu` / `cuda` / `mps` (Apple Silicon) |
+| `WHISPER_COMPUTE_TYPE` | `int8` | `int8` / `float16` / `float32` |
+| `WHISPER_BUFFER_SECONDS` | `4.0` | Audio buffer length per transcription pass |
+| `TRANSCRIBE_LANGUAGE` | `en-US` | Language for Amazon Transcribe |
 | `USE_FAKE_AUDIO` | `false` | `true` = use WAV file instead of mic |
-| `FAKE_AUDIO_PATH` | `data/test_audio.wav` | Path to test WAV file |
 
 ---
 
 ## Running Tests
 
 ```bash
-# Unit tests (no AWS or Docker required)
+# All tests (no AWS calls required — Bedrock KB is mocked)
+uv run pytest tests/ -v
+
+# CCM engine unit tests only
 uv run pytest tests/test_ccm_engine.py -v
 
-# Integration tests (requires Qdrant running on localhost:6333)
-uv run pytest tests/test_qdrant_client.py -v
-
-# All tests
-uv run pytest tests/ -v
+# Bedrock KB client tests (mocked)
+uv run pytest tests/test_bedrock_kb.py -v
 ```
 
 ---
@@ -418,22 +450,24 @@ uv run pytest tests/ -v
 
 | Problem | Fix |
 |---|---|
-| `PortAudioError: No Default Input Device` | Set `USE_FAKE_AUDIO=true` in `.env`, or install PortAudio (`brew install portaudio` on Mac) |
-| `Bedrock: AccessDeniedException` | Ensure IAM role has `bedrock:InvokeModel` and model access is enabled in Bedrock console (us-east-1) |
-| `Transcribe: UnrecognizedClientException` | Check `AWS_REGION=us-east-1` and `transcribe:StartStreamTranscription` IAM permission |
-| Qdrant version warning | Run `docker pull qdrant/qdrant:latest` then recreate the container |
-| Frontend not connecting to backend | Confirm backend is on port 8000 and no firewall blocks it |
-| No recommendations appearing | Run `scripts/ingest.py` first — an empty KB returns no results |
-| Recommendations are slow (>15s) | Normal for first call (JIT compilation); subsequent calls are faster. Check Bedrock throttling in CloudWatch. |
+| `PortAudioError: No Default Input Device` | Set `USE_FAKE_AUDIO=true`, or `brew install portaudio` on Mac |
+| `Bedrock: AccessDeniedException` | Check IAM permissions and that Cohere + Claude model access is enabled in Bedrock console |
+| `bedrock-agent-runtime: ResourceNotFoundException` | `BEDROCK_KB_ID` is wrong or KB is in a different region |
+| No recommendations after speaking | Check KB sync completed in AWS Console; verify `BEDROCK_KB_ID` is set in `.env` |
+| `Transcribe: UnrecognizedClientException` | Check `AWS_REGION` and `transcribe:StartStreamTranscription` IAM permission |
+| Whisper not found | Run `uv sync --extra whisper` to install faster-whisper |
+| Whisper slow on Mac | Set `WHISPER_DEVICE=mps` for Apple Silicon GPU acceleration |
+| Whisper model download fails | Check internet connection — model downloads from HuggingFace on first run |
+| Frontend not connecting | Confirm backend is running on port 8000 |
 
 ---
 
 ## Roadmap
 
-- **Phase 2:** Multi-agent parallel search (6 specialized agents), Revision Agent for progressive refinement
-- **Phase 3:** System audio capture (BlackHole/VB-Cable), per-speaker diarization UI, competitor comparison agent
+- **Phase 2:** Multi-agent parallel search (6 specialized agents: architecture, migration, comparison, code, cost, security), Revision Agent
+- **Phase 3:** Speaker diarization UI, system audio capture (BlackHole/VB-Cable auto-config)
 - **Phase 4:** Electron desktop overlay (always-on-top), session export (PDF/Markdown)
-- **Phase 5:** Configurable `sources.yaml` with scheduled offline ingestion, GitHub repo and YouTube transcript sources
+- **Phase 5:** Configurable `sources.yaml` with scheduled ingestion, GitHub repo and YouTube transcript indexing
 
 ---
 
