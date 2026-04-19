@@ -163,8 +163,15 @@ async def handle_final_transcript(text: str) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import os
+    env_file = os.path.abspath(".env")
+    env_loaded = os.path.exists(env_file)
     logger.info("Starting Meeting Intelligence Assistant backend...")
+    logger.info(f"Working directory: {os.getcwd()}")
+    logger.info(f".env file: {env_file} ({'FOUND' if env_loaded else 'NOT FOUND — run from project root!'})")
     logger.info(f"STT provider: {settings.stt_provider}")
+    logger.info(f"Bedrock Haiku model: {settings.bedrock_haiku_model}")
+    logger.info(f"Bedrock Sonnet model: {settings.bedrock_sonnet_model}")
 
     if bedrock_kb.is_configured():
         logger.info(f"Bedrock KB: {settings.bedrock_kb_id} ({settings.bedrock_kb_search_type})")

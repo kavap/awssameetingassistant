@@ -70,13 +70,39 @@ def _call_sonnet(system: str, user: str, max_tokens: int = 1200) -> str:
         "system": system,
         "messages": [{"role": "user", "content": user}],
     })
-    resp = _bedrock.invoke_model(
-        modelId=settings.bedrock_sonnet_model,
-        body=body,
-        contentType="application/json",
-        accept="application/json",
-    )
-    return json.loads(resp["body"].read())["content"][0]["text"].strip()
+    # Try configured model first; if ValidationException, try common fallback IDs
+    model_candidates = [
+        settings.bedrock_sonnet_model,
+        "us.anthropic.claude-sonnet-4-6-20250514-v1:0",
+        "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+        "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+    ]
+    # Deduplicate while preserving order
+    seen: set[str] = set()
+    unique_candidates = [m for m in model_candidates if not (m in seen or seen.add(m))]
+
+    last_exc: Exception | None = None
+    for model_id in unique_candidates:
+        try:
+            resp = _bedrock.invoke_model(
+                modelId=model_id,
+                body=body,
+                contentType="application/json",
+                accept="application/json",
+            )
+            if model_id != settings.bedrock_sonnet_model:
+                logger.warning(
+                    f"Configured Sonnet model {settings.bedrock_sonnet_model!r} failed; "
+                    f"using fallback {model_id!r}. Update BEDROCK_SONNET_MODEL in .env."
+                )
+            return json.loads(resp["body"].read())["content"][0]["text"].strip()
+        except Exception as exc:
+            if "ValidationException" in type(exc).__name__ or "invalid" in str(exc).lower():
+                logger.debug(f"Model {model_id!r} rejected: {exc}")
+                last_exc = exc
+                continue
+            raise  # non-validation errors propagate immediately
+    raise last_exc  # all candidates failed
 
 
 def _parse_json_safe(text: str) -> dict:
