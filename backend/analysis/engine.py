@@ -34,7 +34,7 @@ from .prompts import (
 
 logger = logging.getLogger(__name__)
 
-ANALYZE_EVERY = 5        # run a cycle every N final segments
+ANALYZE_EVERY = 3        # run a cycle every N final segments
 MAX_TRANSCRIPT_SEGMENTS = 100
 MAX_KB_RESULTS = 25
 

@@ -19,8 +19,12 @@ class ConnectionManager:
         logger.info(f"WS connected. Total clients: {len(self._connections)}")
 
     def disconnect(self, websocket: WebSocket) -> None:
+        was_present = websocket in self._connections
         self._connections.discard(websocket)
-        logger.info(f"WS disconnected. Total clients: {len(self._connections)}")
+        if was_present:
+            logger.info(f"WS disconnected. Total clients: {len(self._connections)}")
+        else:
+            logger.debug(f"WS disconnect called on unknown socket (already removed)")
 
     async def broadcast(self, message: dict) -> None:
         if not self._connections:
