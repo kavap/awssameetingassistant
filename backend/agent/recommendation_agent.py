@@ -45,6 +45,23 @@ def _invoke_bedrock_sync(model_id: str, messages: list[dict], max_tokens: int = 
     return result["content"][0]["text"]
 
 
+def _extract_json(text: str) -> dict:
+    """Extract JSON object from text that may have markdown fences or preamble."""
+    text = text.strip()
+    if "```" in text:
+        for part in text.split("```"):
+            part = part.strip()
+            if part.startswith("json"):
+                part = part[4:].strip()
+            if part.startswith("{"):
+                text = part
+                break
+    start, end = text.find("{"), text.rfind("}")
+    if start == -1 or end < start:
+        raise ValueError(f"No JSON object found in: {text[:200]!r}")
+    return json.loads(text[start:end + 1])
+
+
 async def _invoke_bedrock(model_id: str, messages: list[dict], max_tokens: int = 1024) -> str:
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(
@@ -104,7 +121,9 @@ async def _rerank_chunks(chunks: list[dict], context: str, query: str) -> list[d
             [{"role": "user", "content": prompt}],
             max_tokens=50,
         )
-        indices = json.loads(response.strip())
+        raw = response.strip()
+        start, end = raw.find("["), raw.rfind("]")
+        indices = json.loads(raw[start:end + 1] if start != -1 else raw)
         return [chunks[i] for i in indices if 0 <= i < len(chunks)]
     except Exception as e:
         logger.warning(f"Rerank failed ({e}), using top 3 by score.")
@@ -144,7 +163,7 @@ async def _synthesize_recommendation(
             [{"role": "user", "content": prompt}],
             max_tokens=600,
         )
-        card = json.loads(response.strip())
+        card = _extract_json(response)
         card["id"] = str(uuid.uuid4())
         card["trigger"] = trigger_text[:100]
         return card
