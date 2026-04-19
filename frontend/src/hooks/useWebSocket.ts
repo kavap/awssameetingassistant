@@ -21,6 +21,7 @@ export function useWebSocket() {
     setAnalysisTrackB,
     setConnectionStatus,
     setMeetingStatus,
+    setSessionMeta,
   } = useMeetingStore();
 
   useEffect(() => {
@@ -95,7 +96,12 @@ export function useWebSocket() {
             break;
           }
           case "meeting_started": {
+            const ms = msg.payload as {
+              session_id: string; customer_id: string;
+              meeting_type: string;
+            };
             setMeetingStatus("recording");
+            setSessionMeta(ms.session_id, ms.customer_id, ms.meeting_type, msg.ts);
             break;
           }
           case "meeting_stopped": {

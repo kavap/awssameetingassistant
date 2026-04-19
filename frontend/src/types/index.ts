@@ -101,3 +101,26 @@ export interface WsMessage {
 
 export type MeetingStatus = "idle" | "recording" | "stopped";
 export type ConnectionStatus = "connecting" | "connected" | "disconnected";
+
+export interface MeetingIndexEntry {
+  session_id: string;
+  customer_id: string;
+  meeting_type: string;
+  started_at: number;
+  stopped_at: number;
+  transcript_count: number;
+  stage: number;
+  cycle_count: number;
+}
+
+export interface SavedMeeting {
+  session_id: string;
+  customer_id: string;
+  meeting_type: string;
+  started_at: number;
+  stopped_at: number;
+  transcript: TranscriptChunk[];
+  analysis_track_a: AnalysisResult | null;
+  analysis_track_b: AnalysisResult | null;
+  recommendations: RecommendationCard[];
+}

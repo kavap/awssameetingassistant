@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from backend.agentcore import client as agentcore_client
 from backend.agentcore import memory as agentcore_memory
 from backend.agent.recommendation_agent import RecommendationAgent
+from backend import storage
 from backend.analysis.engine import AnalysisEngine
 from backend.analysis.models import MEETING_TYPES
 from backend.audio.capture import get_capture
@@ -234,6 +235,18 @@ class DirectiveRequest(BaseModel):
     directive: str
 
 
+class SaveMeetingRequest(BaseModel):
+    session_id: str
+    customer_id: str = "anonymous"
+    meeting_type: str = "Customer Meeting"
+    started_at: float = 0.0
+    stopped_at: float = 0.0
+    transcript: list[dict] = []
+    analysis_track_a: dict | None = None
+    analysis_track_b: dict | None = None
+    recommendations: list[dict] = []
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -387,6 +400,42 @@ async def add_directive(body: DirectiveRequest):
     return {"status": "ok", "directive": body.directive.strip()}
 
 
+@app.post("/meetings/save")
+async def save_meeting(body: SaveMeetingRequest):
+    """Persist full meeting snapshot sent by the frontend on stop."""
+    try:
+        storage.save_meeting(body.model_dump())
+        logger.info(f"Meeting saved: {body.session_id} ({len(body.transcript)} transcript chunks)")
+        return {"status": "saved", "session_id": body.session_id}
+    except Exception as e:
+        logger.error(f"Failed to save meeting: {e}", exc_info=True)
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.get("/meetings")
+async def list_meetings():
+    """List all saved meetings (index entries, no full content)."""
+    return {"meetings": storage.list_meetings()}
+
+
+@app.get("/meetings/{session_id}")
+async def get_meeting(session_id: str):
+    """Return full saved meeting record."""
+    record = storage.get_meeting(session_id)
+    if record is None:
+        return JSONResponse(status_code=404, content={"error": "Meeting not found"})
+    return record
+
+
+@app.delete("/meetings/{session_id}")
+async def delete_meeting(session_id: str):
+    """Delete a saved meeting."""
+    deleted = storage.delete_meeting(session_id)
+    if not deleted:
+        return JSONResponse(status_code=404, content={"error": "Meeting not found"})
+    return {"status": "deleted", "session_id": session_id}
+
+
 @app.get("/debug/raw/{cycle}/{track}")
 async def debug_raw(cycle: int, track: str):
     """Return raw Sonnet response saved to /tmp for a given cycle+track."""
@@ -448,5 +497,4 @@ async def websocket_endpoint(websocket: WebSocket):
     except Exception as e:
         logger.warning(f"WS error: {e}")
     finally:
-        ws_manager.disconnect(websocket)
         ws_manager.disconnect(websocket)

@@ -20,6 +20,12 @@ interface MeetingStore {
   connectionStatus: ConnectionStatus;
   meetingStatus: MeetingStatus;
 
+  // Session metadata — set from meeting_started WS event, used for save-on-stop
+  sessionId: string | null;
+  customerId: string;
+  meetingType: string;
+  meetingStartedAt: number | null;
+
   appendFinalChunk: (text: string, speaker: string | null, ts: number) => void;
   setPartialText: (text: string) => void;
   prependRecommendation: (card: RecommendationCard) => void;
@@ -29,6 +35,7 @@ interface MeetingStore {
   setAnalysisTrackB: (result: AnalysisResult) => void;
   setConnectionStatus: (status: ConnectionStatus) => void;
   setMeetingStatus: (status: MeetingStatus) => void;
+  setSessionMeta: (sessionId: string, customerId: string, meetingType: string, startedAt: number) => void;
   reset: () => void;
 }
 
@@ -41,6 +48,10 @@ export const useMeetingStore = create<MeetingStore>((set) => ({
   analysisTrackB: null,
   connectionStatus: "disconnected",
   meetingStatus: "idle",
+  sessionId: null,
+  customerId: "anonymous",
+  meetingType: "Customer Meeting",
+  meetingStartedAt: null,
 
   appendFinalChunk: (text, speaker, ts) =>
     set((state) => {
@@ -81,6 +92,9 @@ export const useMeetingStore = create<MeetingStore>((set) => ({
 
   setMeetingStatus: (meetingStatus) => set({ meetingStatus }),
 
+  setSessionMeta: (sessionId, customerId, meetingType, startedAt) =>
+    set({ sessionId, customerId, meetingType, meetingStartedAt: startedAt }),
+
   reset: () =>
     set({
       transcriptChunks: [],
@@ -90,5 +104,9 @@ export const useMeetingStore = create<MeetingStore>((set) => ({
       analysisTrackA: null,
       analysisTrackB: null,
       meetingStatus: "idle",
+      sessionId: null,
+      customerId: "anonymous",
+      meetingType: "Customer Meeting",
+      meetingStartedAt: null,
     }),
 }));

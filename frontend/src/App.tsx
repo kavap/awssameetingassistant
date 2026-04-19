@@ -5,6 +5,7 @@ import { useMeetingStore } from "./store/meetingStore";
 import { TranscriptPanel } from "./components/TranscriptPanel";
 import { AnalysisPanel } from "./components/AnalysisPanel";
 import { StartMeetingModal } from "./components/StartMeetingModal";
+import { PastMeetingsDrawer } from "./components/PastMeetingsDrawer";
 import type { MeetingType } from "./types";
 import "./index.css";
 
@@ -52,9 +53,10 @@ export default function App() {
 
   const connectionStatus = useMeetingStore((s) => s.connectionStatus);
   const meetingStatus = useMeetingStore((s) => s.meetingStatus);
-  const analysisTrackA = useMeetingStore((s) => s.analysisTrackA); // for stage badge
+  const analysisTrackA = useMeetingStore((s) => s.analysisTrackA);
 
   const [showModal, setShowModal] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   async function startMeeting(customerId: string, meetingType: MeetingType) {
     setShowModal(false);
@@ -66,7 +68,29 @@ export default function App() {
   }
 
   async function stopMeeting() {
+    // Snapshot full state before stop clears backend session
+    const state = useMeetingStore.getState();
+    const snapshot = {
+      session_id: state.sessionId,
+      customer_id: state.customerId,
+      meeting_type: state.meetingType,
+      started_at: state.meetingStartedAt ?? Date.now() / 1000,
+      stopped_at: Date.now() / 1000,
+      transcript: state.transcriptChunks,
+      analysis_track_a: state.analysisTrackA,
+      analysis_track_b: state.analysisTrackB,
+      recommendations: state.recommendations,
+    };
+
     await fetch(`${BACKEND}/meeting/stop`, { method: "POST" });
+
+    if (snapshot.session_id) {
+      fetch(`${BACKEND}/meetings/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(snapshot),
+      }).catch((e) => console.warn("[App] Failed to save meeting:", e));
+    }
   }
 
   const isRecording = meetingStatus === "recording";
@@ -115,6 +139,19 @@ export default function App() {
             {connectionStatus}
           </div>
 
+          {/* Past Meetings button */}
+          <button
+            onClick={() => setShowHistory(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-slate-100 text-xs font-medium rounded transition-colors border border-slate-700"
+            title="View past meetings"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+            History
+          </button>
+
           {!isRecording ? (
             <button
               onClick={() => setShowModal(true)}
@@ -161,6 +198,12 @@ export default function App() {
           onCancel={() => setShowModal(false)}
         />
       )}
+
+      {/* Past Meetings Drawer */}
+      <PastMeetingsDrawer
+        open={showHistory}
+        onClose={() => setShowHistory(false)}
+      />
     </div>
   );
 }
