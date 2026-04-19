@@ -505,7 +505,7 @@ class AnalysisEngine:
         try:
             raw = await loop.run_in_executor(
                 _executor,
-                partial(_call_sonnet, role_prefix, user_prompt, 6000),
+                partial(_call_sonnet, role_prefix, user_prompt, 15000),
             )
             logger.debug(f"[phase3 sonnet raw first 2000] {raw[:2000]!r}")
             result = _build_result(raw, stage, ready, reasoning,
