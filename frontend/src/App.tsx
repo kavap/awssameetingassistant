@@ -4,6 +4,7 @@ import { useWebSocket } from "./hooks/useWebSocket";
 import { useMeetingStore } from "./store/meetingStore";
 import { TranscriptPanel } from "./components/TranscriptPanel";
 import { AnalysisPanel } from "./components/AnalysisPanel";
+import { DiagramsPanel } from "./components/DiagramsPanel";
 import { StartMeetingModal } from "./components/StartMeetingModal";
 import type { MeetingType } from "./types";
 import "./index.css";
@@ -55,6 +56,7 @@ export default function App() {
   const analysisTrackA = useMeetingStore((s) => s.analysisTrackA);
 
   const [showModal, setShowModal] = useState(false);
+  const [rightTab, setRightTab] = useState<"analysis" | "diagrams">("analysis");
 
   async function startMeeting(customerId: string, meetingType: MeetingType) {
     setShowModal(false);
@@ -147,21 +149,54 @@ export default function App() {
           <TranscriptPanel />
         </div>
 
-        {/* Right: Analysis (45%) */}
+        {/* Right: Analysis + Diagrams tabs (45%) */}
         <div className="flex flex-col w-[45%] min-h-0">
-          <div className="px-3 py-2 border-b border-slate-700 flex items-center gap-2 shrink-0">
-            <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-            </svg>
-            <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
+          {/* Tab bar */}
+          <div className="flex items-center border-b border-slate-700 shrink-0">
+            <button
+              onClick={() => setRightTab("analysis")}
+              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${
+                rightTab === "analysis"
+                  ? "border-blue-500 text-slate-100"
+                  : "border-transparent text-slate-500 hover:text-slate-300"
+              }`}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
               Live Analysis
-            </span>
+            </button>
+            <button
+              onClick={() => setRightTab("diagrams")}
+              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${
+                rightTab === "diagrams"
+                  ? "border-violet-500 text-slate-100"
+                  : "border-transparent text-slate-500 hover:text-slate-300"
+              }`}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+              </svg>
+              Diagrams
+              {(analysisTrackA?.current_state_diagram || analysisTrackA?.mermaid_diagram) && (
+                <span className="w-1.5 h-1.5 rounded-full bg-violet-400" />
+              )}
+            </button>
           </div>
+
+          {/* Panel content */}
           <div className="flex-1 min-h-0 flex flex-col">
-            <PanelErrorBoundary>
-              <AnalysisPanel />
-            </PanelErrorBoundary>
+            {rightTab === "analysis" ? (
+              <PanelErrorBoundary>
+                <AnalysisPanel />
+              </PanelErrorBoundary>
+            ) : (
+              <PanelErrorBoundary>
+                <DiagramsPanel />
+              </PanelErrorBoundary>
+            )}
           </div>
         </div>
       </div>

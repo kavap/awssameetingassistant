@@ -61,6 +61,7 @@ export interface AnalysisResult {
   proposed_architecture: string;
   key_recommendations: string;
   sources: string[];
+  current_state_diagram: string;
   mermaid_diagram: string;
   cycle_count: number;
   segment_count?: number;

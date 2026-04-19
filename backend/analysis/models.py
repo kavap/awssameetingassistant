@@ -35,7 +35,8 @@ class AnalysisResult:
     proposed_architecture: str = ""
     key_recommendations: str = ""
     sources: list[str] = field(default_factory=list)
-    mermaid_diagram: str = ""
+    current_state_diagram: str = ""   # Mermaid: customer's current architecture (Stage 3)
+    mermaid_diagram: str = ""         # Mermaid: proposed future state (Stage 3)
     cycle_count: int = 0
     segment_count: int = 0         # AnalysisEngine final-segment count (for stage debug)
     is_steered: bool = False      # True = Track B (directive-influenced)
@@ -54,6 +55,7 @@ class AnalysisResult:
             "proposed_architecture": self.proposed_architecture,
             "key_recommendations": self.key_recommendations,
             "sources": self.sources,
+            "current_state_diagram": self.current_state_diagram,
             "mermaid_diagram": self.mermaid_diagram,
             "cycle_count": self.cycle_count,
             "segment_count": self.segment_count,

@@ -63,12 +63,12 @@ CURRENT STAGE: {stage_label}
 STAGE RULES — follow strictly:
 - STAGE 1 (early / not enough signal): Output ONLY Situation, Current State, Customer Needs, \
 and Open Questions. DO NOT output Proposed Solution Architecture, Key Recommendations, \
-Sources, or Architecture Diagram — omit those sections entirely.
+Sources, Current State Diagram, or Future State Diagram — omit those sections entirely.
 - STAGE 2 (goal becoming clear, architecture direction emerging): Include tentative Architecture \
 with explicit [ASSUMPTION: ...] labels. Keep Recommendations to 2-3 talking points. \
-Omit Architecture Diagram.
+Omit Current State Diagram and Future State Diagram.
 - STAGE 3 (clear customer picture): Full architecture, 3-5 prioritized recommendations, \
-mandatory Mermaid diagram using graph LR syntax.
+mandatory Mermaid diagrams for both Current State Diagram and Future State Diagram using graph LR syntax.
 
 PRIOR ANALYSIS (from previous cycle — refine it, do not just repeat it):
 {previous_analysis}
@@ -111,9 +111,16 @@ Use bullet points for clarity. Bold sub-topics are fine.]
 [Stage 1: omit this section entirely.
  Stage 2+: List source URLs from the knowledge base that grounded your response.]
 
-**Architecture Diagram:**
+**Current State Diagram:**
 [Stage 1 and 2: omit this section entirely.
- Stage 3: Mermaid diagram using graph LR syntax showing the proposed architecture. \
+ Stage 3: Mermaid diagram using graph LR syntax showing the customer's CURRENT architecture \
+ as described in the Current State section — what they have TODAY before any AWS migration. \
+ Start the diagram code immediately after this header with no extra text.]
+
+**Future State Diagram:**
+[Stage 1 and 2: omit this section entirely.
+ Stage 3: Mermaid diagram using graph LR syntax showing the PROPOSED future AWS architecture \
+ from the Proposed Solution Architecture section. \
  Start the diagram code immediately after this header with no extra text.]
 
 FORMATTING RULES:

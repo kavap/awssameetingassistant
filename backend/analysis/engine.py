@@ -138,7 +138,8 @@ def _parse_json_safe(text: str) -> dict:
 
 _SECTION_NAMES = (
     "Situation|Current State|Customer Needs|Open Questions"
-    "|Proposed Solution Architecture|Key Recommendations|Sources|Architecture Diagram"
+    "|Proposed Solution Architecture|Key Recommendations|Sources"
+    "|Current State Diagram|Future State Diagram"
 )
 # Lookahead stops ONLY at the next known section header, not at any bold text inside content
 _SECTION_RE = re.compile(
@@ -184,16 +185,22 @@ def _build_result(
 ) -> AnalysisResult:
     s = _extract_sections(raw)
 
-    # Stage 1: never show architecture or diagram regardless of what Sonnet outputs
+    # Stage 1: never show architecture or diagrams regardless of what Sonnet outputs
     if stage == 1:
         proposed = ""
         recommendations = ""
-        mermaid = ""
+        current_diag = ""
+        future_diag = ""
     else:
         proposed = s.get("Proposed Solution Architecture", "")
         recommendations = s.get("Key Recommendations", "")
-        # Stage 2: no diagram yet
-        mermaid = _strip_mermaid_fence(s.get("Architecture Diagram", "")) if stage == 3 else ""
+        # Stage 2: no diagrams yet
+        if stage == 3:
+            current_diag = _strip_mermaid_fence(s.get("Current State Diagram", ""))
+            future_diag = _strip_mermaid_fence(s.get("Future State Diagram", ""))
+        else:
+            current_diag = ""
+            future_diag = ""
 
     return AnalysisResult(
         stage=stage,
@@ -206,7 +213,8 @@ def _build_result(
         proposed_architecture=proposed,
         key_recommendations=recommendations,
         sources=_extract_sources(s),
-        mermaid_diagram=mermaid,
+        current_state_diagram=current_diag,
+        mermaid_diagram=future_diag,
         cycle_count=cycle_count,
         segment_count=segment_count,
         is_steered=is_steered,
@@ -552,6 +560,8 @@ class AnalysisEngine:
             parts.append(f"**Key Recommendations:**\n{r.key_recommendations}")
         if r.sources:
             parts.append(f"**Sources:**\n" + "\n".join(r.sources))
+        if r.current_state_diagram:
+            parts.append(f"**Current State Diagram:**\n{r.current_state_diagram}")
         if r.mermaid_diagram:
-            parts.append(f"**Architecture Diagram:**\n{r.mermaid_diagram}")
+            parts.append(f"**Future State Diagram:**\n{r.mermaid_diagram}")
         return "\n\n".join(parts)
