@@ -1,4 +1,4 @@
-import { useEffect, useRef, useId } from "react";
+import { useEffect, useRef, useState } from "react";
 import mermaid from "mermaid";
 import { useMeetingStore } from "../store/meetingStore";
 
@@ -22,8 +22,11 @@ mermaid.initialize({
   securityLevel: "loose",
 });
 
+// Global counter for truly unique IDs — avoids StrictMode double-invoke collisions
+let _mermaidIdCounter = 0;
+
 function stripMermaidFence(raw: string): string {
-  const fenced = raw?.trim().match(/^```(?:mermaid)?\s*\n([\s\S]*?)\n?```\s*$/i);
+  const fenced = raw?.trim().match(/^```(?:mermaid)?\s*\n?([\s\S]*?)\n?```\s*$/i);
   return fenced ? fenced[1].trim() : (raw?.trim() ?? "");
 }
 
@@ -49,26 +52,29 @@ function safeBtoa(str: string): string {
 
 interface MermaidRenderProps {
   source: string;
-  id: string;
 }
 
-function MermaidRender({ source, id }: MermaidRenderProps) {
+function MermaidRender({ source }: MermaidRenderProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const prevSourceRef = useRef<string>("");
+  const [error, setError] = useState<string | null>(null);
+  const renderedRef = useRef<string>("");
 
   useEffect(() => {
-    if (!containerRef.current || !source || source === prevSourceRef.current) return;
-    prevSourceRef.current = source;
-
-    const container = containerRef.current;
-    container.innerHTML = "";
+    if (!containerRef.current || !source || source === renderedRef.current) return;
 
     (async () => {
+      // Each render gets a truly unique ID — prevents StrictMode double-invoke collisions
+      const id = `mermaid_diagram_${++_mermaidIdCounter}`;
       try {
+        // Remove any stale element with this ID from a prior attempt
+        document.getElementById(id)?.remove();
+
         const { svg } = await mermaid.render(id, source);
+        renderedRef.current = source;
+        setError(null);
+
         if (containerRef.current) {
           containerRef.current.innerHTML = svg;
-          // Make SVG responsive
           const svgEl = containerRef.current.querySelector("svg");
           if (svgEl) {
             svgEl.removeAttribute("height");
@@ -77,14 +83,23 @@ function MermaidRender({ source, id }: MermaidRenderProps) {
           }
         }
       } catch (err) {
-        if (containerRef.current) {
-          containerRef.current.innerHTML = `<pre class="text-xs text-red-400 p-2 whitespace-pre-wrap">${String(err)}</pre>`;
-        }
+        const msg = String(err);
+        setError(msg);
+        console.warn("[MermaidRender] render failed:", msg, "\nSource:", source);
       }
     })();
-  }, [source, id]);
+  }, [source]);
 
-  return <div ref={containerRef} className="p-3 overflow-x-auto" />;
+  if (error) {
+    return (
+      <div className="p-2 text-xs text-red-400 bg-red-950/30 border-t border-red-900">
+        <p className="font-medium mb-1">Diagram parse error — showing source:</p>
+        <pre className="whitespace-pre-wrap text-slate-400 mt-1">{source}</pre>
+      </div>
+    );
+  }
+
+  return <div ref={containerRef} className="p-3 overflow-x-auto min-h-[60px]" />;
 }
 
 interface DiagramBlockProps {
@@ -96,7 +111,8 @@ interface DiagramBlockProps {
 }
 
 function DiagramBlock({ title, subtitle, source, accentClass, emptyMessage }: DiagramBlockProps) {
-  const uid = useId().replace(/:/g, "_");
+  const [showSource, setShowSource] = useState(false);
+
   let text = "";
   let valid = false;
   let encoded = "";
@@ -105,7 +121,7 @@ function DiagramBlock({ title, subtitle, source, accentClass, emptyMessage }: Di
     valid = !!(text && isMermaidCode(text));
     encoded = valid ? safeBtoa(text) : "";
   } catch {
-    // defensive: never let diagram processing crash the panel
+    // never crash the panel
   }
 
   return (
@@ -116,26 +132,56 @@ function DiagramBlock({ title, subtitle, source, accentClass, emptyMessage }: Di
           <span className="text-xs font-semibold text-slate-100">{title}</span>
           {subtitle && <span className="ml-2 text-xs text-slate-400">{subtitle}</span>}
         </div>
-        {encoded && (
-          <a
-            href={`https://mermaid.live/edit#pako:${encoded}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-blue-300 hover:text-blue-200 transition-colors"
-          >
-            Open ↗
-          </a>
-        )}
+        <div className="flex items-center gap-3">
+          {text && (
+            <button
+              onClick={() => setShowSource((v) => !v)}
+              className="text-xs text-slate-400 hover:text-slate-200 transition-colors"
+            >
+              {showSource ? "Hide source" : "Source"}
+            </button>
+          )}
+          {encoded && (
+            <a
+              href={`https://mermaid.live/edit#pako:${encoded}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-blue-300 hover:text-blue-200 transition-colors"
+            >
+              Open ↗
+            </a>
+          )}
+        </div>
       </div>
 
       {/* Content */}
       {valid ? (
         <div className="bg-slate-900">
-          <MermaidRender source={text} id={`mermaid_${uid}`} />
+          {showSource ? (
+            <pre className="p-3 text-xs text-slate-300 overflow-x-auto whitespace-pre-wrap leading-relaxed">
+              {text}
+            </pre>
+          ) : (
+            <MermaidRender source={text} />
+          )}
         </div>
       ) : (
-        <div className="bg-slate-900 px-3 py-4 text-xs text-slate-500 italic text-center">
-          {emptyMessage}
+        <div className="bg-slate-900">
+          {text ? (
+            /* Has content but not recognized as mermaid — show raw so we can debug */
+            <div>
+              <p className="px-3 pt-3 text-xs text-yellow-400">
+                Content present but not valid Mermaid syntax — showing raw:
+              </p>
+              <pre className="p-3 text-xs text-slate-400 overflow-x-auto whitespace-pre-wrap leading-relaxed">
+                {text}
+              </pre>
+            </div>
+          ) : (
+            <div className="px-3 py-4 text-xs text-slate-500 italic text-center">
+              {emptyMessage}
+            </div>
+          )}
         </div>
       )}
     </div>
