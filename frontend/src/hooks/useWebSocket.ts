@@ -3,7 +3,7 @@ import type { AnalysisResult, CCMState, RecommendationCard, WsMessage } from "..
 import { useMeetingStore } from "../store/meetingStore";
 
 const WS_URL = "ws://localhost:8000/ws";
-const MAX_RETRIES = 5;
+const MAX_RETRIES = Infinity;  // retry indefinitely until intentional close
 
 export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);

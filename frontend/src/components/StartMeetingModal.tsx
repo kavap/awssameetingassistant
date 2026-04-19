@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { MEETING_TYPES, type MeetingType } from "../types";
+import { useMeetingStore } from "../store/meetingStore";
 
 interface Props {
   onConfirm: (customerId: string, meetingType: MeetingType) => void;
@@ -7,6 +8,7 @@ interface Props {
 }
 
 export function StartMeetingModal({ onConfirm, onCancel }: Props) {
+  const connectionStatus = useMeetingStore((s) => s.connectionStatus);
   const [customerId, setCustomerId] = useState("");
   const [meetingType, setMeetingType] = useState<MeetingType>("Customer Meeting");
 
@@ -19,6 +21,12 @@ export function StartMeetingModal({ onConfirm, onCancel }: Props) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div className="bg-slate-800 border border-slate-600 rounded-xl shadow-2xl w-full max-w-md mx-4 p-6">
         <h2 className="text-base font-semibold text-slate-100 mb-4">Start Meeting</h2>
+
+        {connectionStatus !== "connected" && (
+          <div className="mb-4 px-3 py-2 bg-yellow-900/40 border border-yellow-700 rounded-lg text-xs text-yellow-300">
+            Backend {connectionStatus === "connecting" ? "connecting…" : "disconnected"} — make sure the backend is running on port 8000.
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Meeting Type */}

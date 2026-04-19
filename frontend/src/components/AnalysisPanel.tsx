@@ -86,10 +86,14 @@ function stripMermaidFence(raw: string): string {
 }
 
 function MermaidDiagram({ source }: { source: string }) {
-  const text = stripMermaidFence(source ?? "");
-  if (!text || !isMermaidCode(text)) return null;
-
-  const encoded = safeBtoa(text);
+  let text = "", encoded = "";
+  try {
+    text = stripMermaidFence(source ?? "");
+    if (!text || !isMermaidCode(text)) return null;
+    encoded = safeBtoa(text);
+  } catch {
+    return null;
+  }
   return (
     <div className="mb-3">
       <div className="flex items-center gap-2 mb-1">

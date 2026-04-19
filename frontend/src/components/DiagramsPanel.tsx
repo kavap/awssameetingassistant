@@ -34,9 +34,16 @@ interface DiagramBlockProps {
 }
 
 function DiagramBlock({ title, subtitle, source, accentClass, emptyMessage }: DiagramBlockProps) {
-  const text = stripMermaidFence(source ?? "");
-  const valid = text && isMermaidCode(text);
-  const encoded = valid ? safeBtoa(text) : "";
+  let text = "";
+  let valid = false;
+  let encoded = "";
+  try {
+    text = stripMermaidFence(source ?? "");
+    valid = !!(text && isMermaidCode(text));
+    encoded = valid ? safeBtoa(text) : "";
+  } catch {
+    // defensive: never let a diagram crash the panel
+  }
 
   return (
     <div className="border border-slate-700 rounded-lg overflow-hidden">

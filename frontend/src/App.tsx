@@ -120,8 +120,7 @@ export default function App() {
           {!isRecording ? (
             <button
               onClick={() => setShowModal(true)}
-              disabled={connectionStatus !== "connected"}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs font-medium rounded transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs font-medium rounded transition-colors"
             >
               <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
                 <circle cx="12" cy="12" r="10" />
