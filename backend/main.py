@@ -382,7 +382,7 @@ async def add_directive(body: DirectiveRequest):
     if analysis_engine is None:
         return JSONResponse(status_code=409, content={"error": "No active meeting session"})
 
-    analysis_engine.add_directive(body.directive.strip())
+    analysis_engine.add_directive(body.directive.strip(), ccm_engine.get_state_snapshot())
     logger.info(f"SA directive injected: {body.directive!r}")
     return {"status": "ok", "directive": body.directive.strip()}
 

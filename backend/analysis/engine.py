@@ -237,11 +237,18 @@ class AnalysisEngine:
     # Public API
     # ------------------------------------------------------------------
 
-    def add_directive(self, directive: str) -> None:
+    def add_directive(self, directive: str, ccm_state: dict | None = None) -> None:
         d = directive.strip()
         if d and d not in self._directives:
             self._directives.append(d)
             logger.info(f"SA directive added: {d!r}")
+            # Immediately trigger a steered cycle if the engine is idle and has transcript
+            if not self._analyzing and self._segment_count > 0:
+                logger.info(f"[directive] triggering immediate cycle for Track B")
+                asyncio.create_task(
+                    self._analyze_cycle(ccm_state or {}),
+                    name="directive-triggered-cycle",
+                )
 
     async def on_final_segment(self, text: str, ccm_state: dict) -> None:
         """Called by the pipeline for every final transcript segment."""
