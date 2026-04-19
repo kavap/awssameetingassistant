@@ -144,6 +144,11 @@ SA DIRECTIVES (HIGHEST PRIORITY — these override your own assessment):
 The SA has context you may not have from the audio alone. Where these directives conflict \
 with your own reading of the transcript, follow the directive and explain why you are \
 prioritizing it.
+
+STEERED TRACK DIAGRAM NOTE: Omit the **Current State Diagram:** section entirely — \
+the autonomous track already produced it and it does not change with directives. \
+You MUST still produce the **Future State Diagram:** section showing the directive-influenced \
+proposed architecture as a Mermaid graph LR diagram.
 """
 
 # ---------------------------------------------------------------------------

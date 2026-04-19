@@ -514,7 +514,9 @@ class AnalysisEngine:
             logger.info(
                 f"[phase3 result] cycle={self._cycle_count} track={track} stage={stage} "
                 f"situation_len={len(result.situation)} current_state_len={len(result.current_state)} "
-                f"customer_needs_len={len(result.customer_needs)} sources={len(result.sources)}"
+                f"customer_needs_len={len(result.customer_needs)} sources={len(result.sources)} "
+                f"current_state_diagram_len={len(result.current_state_diagram)} "
+                f"future_diagram_len={len(result.mermaid_diagram)}"
             )
             return result
         except Exception as e:
