@@ -1,4 +1,26 @@
+import { useEffect, useRef, useId } from "react";
+import mermaid from "mermaid";
 import { useMeetingStore } from "../store/meetingStore";
+
+mermaid.initialize({
+  startOnLoad: false,
+  theme: "dark",
+  themeVariables: {
+    background: "#0f172a",
+    primaryColor: "#1e3a5f",
+    primaryTextColor: "#e2e8f0",
+    primaryBorderColor: "#334155",
+    lineColor: "#64748b",
+    secondaryColor: "#1e293b",
+    tertiaryColor: "#0f172a",
+    edgeLabelBackground: "#1e293b",
+    clusterBkg: "#1e293b",
+    titleColor: "#94a3b8",
+    nodeTextColor: "#e2e8f0",
+  },
+  flowchart: { curve: "basis", htmlLabels: true },
+  securityLevel: "loose",
+});
 
 function stripMermaidFence(raw: string): string {
   const fenced = raw?.trim().match(/^```(?:mermaid)?\s*\n([\s\S]*?)\n?```\s*$/i);
@@ -25,6 +47,46 @@ function safeBtoa(str: string): string {
   }
 }
 
+interface MermaidRenderProps {
+  source: string;
+  id: string;
+}
+
+function MermaidRender({ source, id }: MermaidRenderProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const prevSourceRef = useRef<string>("");
+
+  useEffect(() => {
+    if (!containerRef.current || !source || source === prevSourceRef.current) return;
+    prevSourceRef.current = source;
+
+    const container = containerRef.current;
+    container.innerHTML = "";
+
+    (async () => {
+      try {
+        const { svg } = await mermaid.render(id, source);
+        if (containerRef.current) {
+          containerRef.current.innerHTML = svg;
+          // Make SVG responsive
+          const svgEl = containerRef.current.querySelector("svg");
+          if (svgEl) {
+            svgEl.removeAttribute("height");
+            svgEl.style.width = "100%";
+            svgEl.style.maxWidth = "100%";
+          }
+        }
+      } catch (err) {
+        if (containerRef.current) {
+          containerRef.current.innerHTML = `<pre class="text-xs text-red-400 p-2 whitespace-pre-wrap">${String(err)}</pre>`;
+        }
+      }
+    })();
+  }, [source, id]);
+
+  return <div ref={containerRef} className="p-3 overflow-x-auto" />;
+}
+
 interface DiagramBlockProps {
   title: string;
   subtitle?: string;
@@ -34,6 +96,7 @@ interface DiagramBlockProps {
 }
 
 function DiagramBlock({ title, subtitle, source, accentClass, emptyMessage }: DiagramBlockProps) {
+  const uid = useId().replace(/:/g, "_");
   let text = "";
   let valid = false;
   let encoded = "";
@@ -42,7 +105,7 @@ function DiagramBlock({ title, subtitle, source, accentClass, emptyMessage }: Di
     valid = !!(text && isMermaidCode(text));
     encoded = valid ? safeBtoa(text) : "";
   } catch {
-    // defensive: never let a diagram crash the panel
+    // defensive: never let diagram processing crash the panel
   }
 
   return (
@@ -67,9 +130,9 @@ function DiagramBlock({ title, subtitle, source, accentClass, emptyMessage }: Di
 
       {/* Content */}
       {valid ? (
-        <pre className="bg-slate-900 p-3 text-xs text-slate-300 overflow-x-auto whitespace-pre-wrap leading-relaxed">
-          {text}
-        </pre>
+        <div className="bg-slate-900">
+          <MermaidRender source={text} id={`mermaid_${uid}`} />
+        </div>
       ) : (
         <div className="bg-slate-900 px-3 py-4 text-xs text-slate-500 italic text-center">
           {emptyMessage}

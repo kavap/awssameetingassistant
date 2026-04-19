@@ -15,7 +15,7 @@ interface SectionProps {
   placeholder?: string;
 }
 
-function Section({ title, content, placeholder }: SectionProps) {
+function Section({ title, content }: SectionProps) {
   const text = content?.trim();
   if (!text) return null;
 
