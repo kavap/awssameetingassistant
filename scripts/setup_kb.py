@@ -295,9 +295,6 @@ def create_knowledge_base(
                 "type": "VECTOR",
                 "vectorKnowledgeBaseConfiguration": {
                     "embeddingModelArn": embed_arn,
-                    "embeddingModelConfiguration": {
-                        "bedrockEmbeddingModelConfiguration": {"dimensions": 1024}
-                    },
                 },
             },
             storageConfiguration={
