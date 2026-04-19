@@ -109,8 +109,7 @@ async def stream_transcription(
                 language_code=settings.transcribe_language,
                 media_sample_rate_hz=settings.audio_sample_rate,
                 media_encoding="pcm",
-                enable_partial_results_stabilization=True,
-                partial_results_stability="high",
+                enable_partial_results_stabilization=False,
                 show_speaker_label=True,
             )
 

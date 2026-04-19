@@ -12,8 +12,8 @@ class Settings(BaseSettings):
     aws_region: str = "us-east-1"
 
     # Bedrock LLM models
-    bedrock_haiku_model: str = "anthropic.claude-haiku-4-5-20251001-v1:0"
-    bedrock_sonnet_model: str = "anthropic.claude-sonnet-4-6-20250514-v1:0"
+    bedrock_haiku_model: str = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    bedrock_sonnet_model: str = "us.anthropic.claude-sonnet-4-6-20250514-v1:0"
 
     # Bedrock embedding — Cohere embed v3 (1024 dims)
     bedrock_embedding_model: str = "cohere.embed-english-v3"
