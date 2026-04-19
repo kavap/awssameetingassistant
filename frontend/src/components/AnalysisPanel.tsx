@@ -111,8 +111,16 @@ export function AnalysisPanel() {
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Tab bar: Auto | Steered | Diagrams */}
-      <div className="flex items-center border-b border-slate-700 shrink-0 px-1">
+      {/* Panel header + tabs — single row */}
+      <div className="flex items-center border-b border-slate-700 shrink-0 px-2 gap-2">
+        <div className="flex items-center gap-1.5 mr-1">
+          <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
+          <span className="text-xs font-medium text-slate-400 uppercase tracking-wider whitespace-nowrap">Live Analysis</span>
+        </div>
+        <div className="w-px h-4 bg-slate-700 shrink-0" />
         {/* Auto tab */}
         <button
           onClick={() => setActiveTab("auto")}
