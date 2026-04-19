@@ -10,6 +10,7 @@ export function useWebSocket() {
   const retriesRef = useRef(0);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const intentionalCloseRef = useRef(false);
+  const generationRef = useRef(0);
 
   const {
     appendFinalChunk,
@@ -23,6 +24,7 @@ export function useWebSocket() {
   useEffect(() => {
     function connect() {
       intentionalCloseRef.current = false;
+      const generation = ++generationRef.current;
       setConnectionStatus("connecting");
       const ws = new WebSocket(WS_URL);
       wsRef.current = ws;
@@ -79,6 +81,8 @@ export function useWebSocket() {
       };
 
       ws.onclose = () => {
+        // Ignore stale close events from connections superseded by cleanup+remount
+        if (generationRef.current !== generation) return;
         setConnectionStatus("disconnected");
         wsRef.current = null;
 

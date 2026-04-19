@@ -60,6 +60,27 @@ Set should_recommend=true when the segment contains a question, a new service/ar
 # Haiku call (sync — runs in executor)
 # ---------------------------------------------------------------------------
 
+def _extract_json(text: str) -> dict:
+    """Extract JSON object from text that may have markdown fences or preamble."""
+    text = text.strip()
+    # Strip markdown code fences
+    if "```" in text:
+        parts = text.split("```")
+        for part in parts:
+            part = part.strip()
+            if part.startswith("json"):
+                part = part[4:].strip()
+            if part.startswith("{"):
+                text = part
+                break
+    # Find first { ... last }
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end == -1 or end < start:
+        raise ValueError(f"No JSON object found in response: {text[:200]!r}")
+    return json.loads(text[start:end + 1])
+
+
 def _call_haiku_sync(prompt: str) -> dict:
     body = json.dumps({
         "anthropic_version": "bedrock-2023-05-31",
@@ -74,8 +95,8 @@ def _call_haiku_sync(prompt: str) -> dict:
         contentType="application/json",
         accept="application/json",
     )
-    raw = json.loads(resp["body"].read())["content"][0]["text"].strip()
-    return json.loads(raw)
+    raw = json.loads(resp["body"].read())["content"][0]["text"]
+    return _extract_json(raw)
 
 
 # ---------------------------------------------------------------------------
