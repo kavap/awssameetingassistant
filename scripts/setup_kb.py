@@ -176,33 +176,30 @@ def create_aoss_collection(
         collection_arn = detail["arn"]
         console.print(f"[yellow]→[/yellow] AOSS collection already exists: [bold]{collection_id}[/bold]")
 
-    # 4. Data access policy — grant KB role + caller (for index creation)
+    # 4. Data access policy — two separate statements (index + collection)
+    #    Use aoss:* wildcard to avoid per-permission enum validation issues.
     try:
         aoss.create_access_policy(
             name=f"{collection_name}-access",
             type="data",
-            policy=json.dumps([{
-                "Rules": [
-                    {
+            policy=json.dumps([
+                {
+                    "Rules": [{
                         "ResourceType": "index",
                         "Resource": [f"index/{collection_name}/*"],
-                        "Permission": [
-                            "aoss:CreateIndex", "aoss:UpdateIndex", "aoss:DescribeIndex",
-                            "aoss:ReadDocument", "aoss:WriteDocument", "aoss:DeleteDocument",
-                        ],
-                    },
-                    {
+                        "Permission": ["aoss:*"],
+                    }],
+                    "Principal": [role_arn, caller_arn],
+                },
+                {
+                    "Rules": [{
                         "ResourceType": "collection",
                         "Resource": [f"collection/{collection_name}"],
-                        "Permission": [
-                            "aoss:DescribeCollectionItems",
-                            "aoss:CreateCollectionItems",
-                            "aoss:UpdateCollectionItems",
-                        ],
-                    },
-                ],
-                "Principal": [role_arn, caller_arn],
-            }]),
+                        "Permission": ["aoss:*"],
+                    }],
+                    "Principal": [role_arn, caller_arn],
+                },
+            ]),
         )
         console.print("[green]✓[/green] AOSS data access policy created")
     except aoss.exceptions.ConflictException:
