@@ -33,6 +33,11 @@ dependencies = [
 whisper = [
     "faster-whisper>=1.1.0",
 ]
+# Amazon Bedrock AgentCore Runtime + Memory
+# uv sync --extra agentcore
+agentcore = [
+    "bedrock-agentcore",
+]
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.25",

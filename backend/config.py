@@ -47,6 +47,13 @@ class Settings(BaseSettings):
     backend_port: int = 8000
     backend_host: str = "0.0.0.0"
 
+    # AgentCore Runtime
+    agentcore_runtime_arn: str = ""     # set after: agentcore deploy
+
+    # AgentCore Memory
+    agentcore_memory_id: str = ""           # set after: scripts/setup_agentcore.py
+    agentcore_memory_strategy_id: str = ""  # set after: scripts/setup_agentcore.py
+
     # Development / testing
     use_fake_audio: bool = False
     fake_audio_path: str = "data/test_audio.wav"

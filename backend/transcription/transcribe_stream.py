@@ -18,7 +18,19 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Retry config
+
+def _make_queue_handler(event_queue: asyncio.Queue):
+    """Fallback: push CCM events to the local queue (used when on_ccm_event not provided)."""
+    async def _handler(ccm_event):
+        try:
+            event_queue.put_nowait(ccm_event)
+        except asyncio.QueueFull:
+            try:
+                event_queue.get_nowait()
+                event_queue.put_nowait(ccm_event)
+            except asyncio.QueueEmpty:
+                pass
+    return _handler
 MAX_RETRIES = 3
 RETRY_BACKOFF_BASE = 1.0  # seconds
 
@@ -34,7 +46,7 @@ async def _send_audio(stream, audio_gen):
         await stream.input_stream.end_stream()
 
 
-async def _receive_transcripts(stream, ccm_engine: CCMEngine, ws_manager, event_queue: asyncio.Queue):
+async def _receive_transcripts(stream, ccm_engine: CCMEngine, ws_manager, on_ccm_event):
     """Consumer: receive Transcribe events, update CCM, push to WebSocket."""
     try:
         async for event in stream.output_stream:
@@ -68,27 +80,9 @@ async def _receive_transcripts(stream, ccm_engine: CCMEngine, ws_manager, event_
                     })
 
                     if not is_partial:
-                        ccm_event = ccm_engine.process_transcript_segment(text, is_final=True)
+                        ccm_event = await ccm_engine.process_transcript_segment(text, is_final=True)
                         if ccm_event:
-                            # Push CCM state update to WebSocket
-                            await ws_manager.broadcast({
-                                "type": "ccm_update",
-                                "ts": time.time(),
-                                "payload": ccm_event.context_snapshot,
-                            })
-                            # Enqueue for recommendation agent (non-blocking)
-                            try:
-                                event_queue.put_nowait(ccm_event)
-                            except asyncio.QueueFull:
-                                # Drop oldest event to make room
-                                try:
-                                    event_queue.get_nowait()
-                                    event_queue.put_nowait(ccm_event)
-                                except asyncio.QueueEmpty:
-                                    pass
-                    else:
-                        # Process partial for service detection only (no transcript append)
-                        ccm_engine.process_transcript_segment(text, is_final=False)
+                            await on_ccm_event(ccm_event)
 
     except Exception as e:
         logger.error(f"Transcript receive error: {e}")
@@ -100,6 +94,7 @@ async def stream_transcription(
     ws_manager,
     event_queue: asyncio.Queue,
     stop_event: asyncio.Event,
+    on_ccm_event=None,
 ) -> None:
     """Main transcription loop with retry logic."""
     attempt = 0
@@ -122,9 +117,10 @@ async def stream_transcription(
             logger.info("Transcribe stream started.")
             attempt = 0  # reset on successful connection
 
+            _on_event = on_ccm_event or _make_queue_handler(event_queue)
             await asyncio.gather(
                 _send_audio(stream, audio_gen),
-                _receive_transcripts(stream, ccm_engine, ws_manager, event_queue),
+                _receive_transcripts(stream, ccm_engine, ws_manager, _on_event),
             )
             break  # clean exit
 

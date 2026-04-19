@@ -110,6 +110,25 @@ wheels = [
 ]
 
 [[package]]
+name = "bedrock-agentcore"
+version = "1.6.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "boto3" },
+    { name = "botocore" },
+    { name = "pydantic" },
+    { name = "starlette" },
+    { name = "typing-extensions" },
+    { name = "urllib3" },
+    { name = "uvicorn" },
+    { name = "websockets" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2a/78/90b00222b15b1c667eed72f2abeb8a2bb7c992aa3dd8415fdf3bf962438b/bedrock_agentcore-1.6.3.tar.gz", hash = "sha256:3876840713aba033232165e3cf442ee959df291e3d410b602f08baaea6aee883", size = 517941, upload-time = "2026-04-16T23:55:22.447Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/95/e0/cba6bfcc239bc94e6735ab2bdfe507692c9f395520acb156d02453ecaaf8/bedrock_agentcore-1.6.3-py3-none-any.whl", hash = "sha256:88a83e214c674a20157ad658876c5a5ee1b874bae87b45e42984b23c883e7210", size = 165854, upload-time = "2026-04-16T23:55:20.958Z" },
+]
+
+[[package]]
 name = "boto3"
 version = "1.42.91"
 source = { registry = "https://pypi.org/simple" }
@@ -581,6 +600,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+agentcore = [
+    { name = "bedrock-agentcore" },
+]
 dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -599,6 +621,7 @@ dev = [
 requires-dist = [
     { name = "amazon-transcribe", specifier = ">=0.6.4" },
     { name = "beautifulsoup4", specifier = ">=4.13" },
+    { name = "bedrock-agentcore", marker = "extra == 'agentcore'" },
     { name = "boto3", specifier = ">=1.42.85" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "faster-whisper", marker = "extra == 'whisper'", specifier = ">=1.1.0" },
@@ -614,7 +637,7 @@ requires-dist = [
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },
     { name = "websockets", specifier = ">=14.0" },
 ]
-provides-extras = ["whisper", "dev"]
+provides-extras = ["whisper", "agentcore", "dev"]
 
 [package.metadata.requires-dev]
 dev = [

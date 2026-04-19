@@ -88,6 +88,7 @@ async def stream_transcription(
     ws_manager: "ConnectionManager",
     event_queue: asyncio.Queue,
     stop_event: asyncio.Event,
+    on_ccm_event=None,
 ) -> None:
     """Whisper-based transcription pipeline.
 
@@ -142,21 +143,19 @@ async def stream_transcription(
                     })
 
                     # Update CCM
-                    ccm_event = ccm_engine.process_transcript_segment(text, is_final=True)
+                    ccm_event = await ccm_engine.process_transcript_segment(text, is_final=True)
                     if ccm_event:
-                        await ws_manager.broadcast({
-                            "type": "ccm_update",
-                            "ts": time.time(),
-                            "payload": ccm_event.context_snapshot,
-                        })
-                        try:
-                            event_queue.put_nowait(ccm_event)
-                        except asyncio.QueueFull:
+                        if on_ccm_event:
+                            await on_ccm_event(ccm_event)
+                        else:
                             try:
-                                event_queue.get_nowait()
                                 event_queue.put_nowait(ccm_event)
-                            except asyncio.QueueEmpty:
-                                pass
+                            except asyncio.QueueFull:
+                                try:
+                                    event_queue.get_nowait()
+                                    event_queue.put_nowait(ccm_event)
+                                except asyncio.QueueEmpty:
+                                    pass
 
                 # Keep overlap window to avoid cutting words at buffer boundary
                 buffer = buffer[
