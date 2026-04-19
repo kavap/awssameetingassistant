@@ -27,7 +27,9 @@ let _mermaidIdCounter = 0;
 
 function stripMermaidFence(raw: string): string {
   const fenced = raw?.trim().match(/^```(?:mermaid)?\s*\n?([\s\S]*?)\n?```\s*$/i);
-  return fenced ? fenced[1].trim() : (raw?.trim() ?? "");
+  const text = fenced ? fenced[1].trim() : (raw?.trim() ?? "");
+  // Replace literal \n inside quoted node labels — Mermaid doesn't support them
+  return text.replace(/\\n/g, " ");
 }
 
 function isMermaidCode(text: string): boolean {

@@ -113,15 +113,17 @@ Use bullet points for clarity. Bold sub-topics are fine.]
 
 **Current State Diagram:**
 [Stage 1 and 2: omit this section entirely.
- Stage 3: Mermaid diagram using graph LR syntax showing the customer's CURRENT architecture \
- as described in the Current State section — what they have TODAY before any AWS migration. \
- Start the diagram code immediately after this header with no extra text.]
+ Stage 3: Mermaid diagram using graph LR syntax showing the customer's CURRENT architecture. \
+ RULES: max 12 nodes, use short single-line labels only (NO \\n in labels — use a space instead), \
+ keep subgraph names short, do NOT nest more than 2 levels of subgraphs. \
+ Start the diagram code immediately after this header with no extra text or commentary.]
 
 **Future State Diagram:**
 [Stage 1 and 2: omit this section entirely.
- Stage 3: Mermaid diagram using graph LR syntax showing the PROPOSED future AWS architecture \
- from the Proposed Solution Architecture section. \
- Start the diagram code immediately after this header with no extra text.]
+ Stage 3: Mermaid diagram using graph LR syntax showing the PROPOSED future AWS architecture. \
+ RULES: max 12 nodes, use short single-line labels only (NO \\n in labels — use a space instead), \
+ keep subgraph names short, do NOT nest more than 2 levels of subgraphs. \
+ Start the diagram code immediately after this header with no extra text or commentary.]
 
 FORMATTING RULES:
 - Use the exact bold header format above: **Header Name:**
@@ -148,7 +150,8 @@ prioritizing it.
 STEERED TRACK DIAGRAM NOTE: Omit the **Current State Diagram:** section entirely — \
 the autonomous track already produced it and it does not change with directives. \
 You MUST still produce the **Future State Diagram:** section showing the directive-influenced \
-proposed architecture as a Mermaid graph LR diagram.
+proposed architecture as a Mermaid graph LR diagram. \
+Keep it concise: max 12 nodes, short single-line labels (NO \\n — use a space instead).
 """
 
 # ---------------------------------------------------------------------------
