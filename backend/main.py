@@ -387,6 +387,24 @@ async def add_directive(body: DirectiveRequest):
     return {"status": "ok", "directive": body.directive.strip()}
 
 
+@app.get("/debug/raw/{cycle}/{track}")
+async def debug_raw(cycle: int, track: str):
+    """Return raw Sonnet response saved to /tmp for a given cycle+track."""
+    import pathlib
+    path = pathlib.Path(f"/tmp/meeting_debug_cycle{cycle}_track{track}.txt")
+    if not path.exists():
+        return JSONResponse(status_code=404, content={"error": f"No debug file at {path}"})
+    return {"path": str(path), "content": path.read_text(encoding="utf-8")}
+
+
+@app.get("/debug/list")
+async def debug_list():
+    """List all saved debug files in /tmp."""
+    import pathlib, glob
+    files = sorted(glob.glob("/tmp/meeting_debug_*.txt"))
+    return {"files": files}
+
+
 @app.post("/ask")
 async def manual_ask(body: dict):
     """Manually inject a question for immediate recommendation."""

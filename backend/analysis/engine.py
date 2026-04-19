@@ -507,14 +507,23 @@ class AnalysisEngine:
                 _executor,
                 partial(_call_sonnet, role_prefix, user_prompt, 15000),
             )
-            logger.debug(f"[phase3 sonnet raw first 2000] {raw[:2000]!r}")
+            track = "B" if is_steered else "A"
+
+            # --- Debug: save full raw response to /tmp for inspection ---
+            import os, pathlib
+            debug_path = pathlib.Path(f"/tmp/meeting_debug_cycle{self._cycle_count}_track{track}.txt")
+            debug_path.write_text(
+                f"=== cycle={self._cycle_count} track={track} stage={stage} raw_len={len(raw)} ===\n\n{raw}",
+                encoding="utf-8",
+            )
+            logger.info(f"[phase3 debug] raw response ({len(raw)} chars) saved to {debug_path}")
+
             result = _build_result(raw, stage, ready, reasoning,
                                    self._cycle_count, self._segment_count, is_steered)
-            track = "B" if is_steered else "A"
             logger.info(
                 f"[phase3 result] cycle={self._cycle_count} track={track} stage={stage} "
+                f"raw_len={len(raw)} "
                 f"situation_len={len(result.situation)} current_state_len={len(result.current_state)} "
-                f"customer_needs_len={len(result.customer_needs)} sources={len(result.sources)} "
                 f"current_state_diagram_len={len(result.current_state_diagram)} "
                 f"future_diagram_len={len(result.mermaid_diagram)}"
             )

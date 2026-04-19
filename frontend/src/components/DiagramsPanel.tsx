@@ -32,9 +32,30 @@ function stripMermaidFence(raw: string): string {
   return text.replace(/\\n/g, " ");
 }
 
-function sanitizeMermaid(text: string): string {
-  // If Sonnet generated graph LR, upgrade to flowchart LR (more robust in mermaid 11)
-  return text.replace(/^graph\s+(LR|TD|RL|BT)/m, (_, dir) => `flowchart ${dir}`);
+function sanitizeMermaid(raw: string): string {
+  let text = raw;
+
+  // 1. Upgrade graph LR → flowchart LR
+  text = text.replace(/^graph\s+(LR|TD|RL|BT)/m, (_, dir) => `flowchart ${dir}`);
+
+  // 2. Fix subgraph IDs with spaces: "subgraph Foo Bar" → subgraph FooBar["Foo Bar"]
+  //    But leave alone ones that already have ["..."] or just a single word
+  text = text.replace(/^(\s*subgraph\s+)([A-Za-z][A-Za-z0-9 _]*)(\s*)$/gm, (_m, prefix, name, trail) => {
+    if (!name.includes('[') && name.includes(' ')) {
+      const id = name.trim().replace(/\s+/g, '_');
+      return `${prefix}${id}["${name.trim()}"]${trail}`;
+    }
+    return _m;
+  });
+
+  // 3. Close any unclosed subgraphs (count open vs closed)
+  const opens = (text.match(/^\s*subgraph\b/gm) || []).length;
+  const closes = (text.match(/^\s*end\s*$/gm) || []).length;
+  if (opens > closes) {
+    text = text + '\n' + 'end\n'.repeat(opens - closes);
+  }
+
+  return text;
 }
 
 function isMermaidCode(text: string): boolean {
@@ -96,9 +117,10 @@ function MermaidRender({ source }: MermaidRenderProps) {
 
   if (error) {
     return (
-      <div className="p-2 text-xs text-red-400 bg-red-950/30 border-t border-red-900">
-        <p className="font-medium mb-1">Diagram parse error — showing source:</p>
-        <pre className="whitespace-pre-wrap text-slate-400 mt-1">{source}</pre>
+      <div className="p-2 text-xs text-red-400 bg-red-950/30 border-t border-red-900 max-h-[400px] overflow-y-auto">
+        <p className="font-medium mb-1">Mermaid parse error (check browser console for details):</p>
+        <p className="text-slate-500 mb-2 font-mono">{error.slice(0, 200)}</p>
+        <pre className="whitespace-pre text-slate-400 overflow-x-auto">{source}</pre>
       </div>
     );
   }
@@ -160,9 +182,9 @@ function DiagramBlock({ title, subtitle, source, accentClass, emptyMessage }: Di
 
       {/* Content */}
       {valid ? (
-        <div className="bg-slate-900">
+        <div className="bg-slate-900 max-h-[400px] overflow-y-auto overflow-x-auto">
           {showSource ? (
-            <pre className="p-3 text-xs text-slate-300 overflow-x-auto whitespace-pre-wrap leading-relaxed">
+            <pre className="p-3 text-xs text-slate-300 whitespace-pre leading-relaxed">
               {text}
             </pre>
           ) : (
@@ -170,14 +192,13 @@ function DiagramBlock({ title, subtitle, source, accentClass, emptyMessage }: Di
           )}
         </div>
       ) : (
-        <div className="bg-slate-900">
+        <div className="bg-slate-900 max-h-[400px] overflow-y-auto">
           {text ? (
-            /* Has content but not recognized as mermaid — show raw so we can debug */
             <div>
               <p className="px-3 pt-3 text-xs text-yellow-400">
-                Content present but not valid Mermaid syntax — showing raw:
+                Not recognized as Mermaid — showing raw source:
               </p>
-              <pre className="p-3 text-xs text-slate-400 overflow-x-auto whitespace-pre-wrap leading-relaxed">
+              <pre className="p-3 text-xs text-slate-400 whitespace-pre leading-relaxed overflow-x-auto">
                 {text}
               </pre>
             </div>
