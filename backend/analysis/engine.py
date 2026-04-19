@@ -100,10 +100,13 @@ def _parse_json_safe(text: str) -> dict:
 # Section extraction helpers
 # ---------------------------------------------------------------------------
 
+_SECTION_NAMES = (
+    "Situation|Current State|Customer Needs|Open Questions"
+    "|Proposed Solution Architecture|Key Recommendations|Sources|Architecture Diagram"
+)
+# Lookahead stops ONLY at the next known section header, not at any bold text inside content
 _SECTION_RE = re.compile(
-    r"\*\*(Situation|Current State|Customer Needs|Open Questions"
-    r"|Proposed Solution Architecture|Key Recommendations|Sources"
-    r"|Architecture Diagram):\*\*\s*(.*?)(?=\*\*\w|$)",
+    rf"\*\*({_SECTION_NAMES}):\*\*\s*(.*?)(?=\*\*(?:{_SECTION_NAMES}):\*\*|$)",
     re.DOTALL,
 )
 
@@ -111,13 +114,21 @@ _SECTION_RE = re.compile(
 def _extract_sections(text: str) -> dict[str, str]:
     sections: dict[str, str] = {}
     for m in _SECTION_RE.finditer(text):
-        sections[m.group(1).strip()] = m.group(2).strip()
+        key = m.group(1).strip()
+        value = m.group(2).strip()
+        sections[key] = value
+        logger.debug(f"[section extracted] {key!r}: {len(value)} chars, preview={value[:80]!r}")
+    if not sections:
+        logger.warning(f"[section extraction] NO sections found. Raw first 300: {text[:300]!r}")
     return sections
 
 
 def _extract_sources(sections: dict[str, str]) -> list[str]:
     raw = sections.get("Sources", "")
     return [u.strip() for u in re.findall(r"https?://\S+", raw)]
+
+
+_GATHERING = "Gathering context — not enough signal yet."
 
 
 def _build_result(
@@ -129,6 +140,18 @@ def _build_result(
     is_steered: bool,
 ) -> AnalysisResult:
     s = _extract_sections(raw)
+
+    # Stage 1: never show architecture or diagram regardless of what Sonnet outputs
+    if stage == 1:
+        proposed = ""
+        recommendations = ""
+        mermaid = ""
+    else:
+        proposed = s.get("Proposed Solution Architecture", "")
+        recommendations = s.get("Key Recommendations", "")
+        # Stage 2: no diagram yet
+        mermaid = s.get("Architecture Diagram", "") if stage == 3 else ""
+
     return AnalysisResult(
         stage=stage,
         ready=ready,
@@ -137,10 +160,10 @@ def _build_result(
         current_state=s.get("Current State", ""),
         customer_needs=s.get("Customer Needs", ""),
         open_questions=s.get("Open Questions", ""),
-        proposed_architecture=s.get("Proposed Solution Architecture", ""),
-        key_recommendations=s.get("Key Recommendations", ""),
+        proposed_architecture=proposed,
+        key_recommendations=recommendations,
         sources=_extract_sources(s),
-        mermaid_diagram=s.get("Architecture Diagram", ""),
+        mermaid_diagram=mermaid,
         cycle_count=cycle_count,
         is_steered=is_steered,
     )

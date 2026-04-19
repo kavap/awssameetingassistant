@@ -61,10 +61,12 @@ Analyze the transcript and AWS knowledge provided, then generate a structured an
 CURRENT STAGE: {stage_label}
 
 STAGE RULES — follow strictly:
-- STAGE 1 (early / not enough signal): Fill Situation, Current State, Customer Needs only. \
-Write "Gathering context — not enough signal yet." for Architecture, Recommendations, and Diagram.
+- STAGE 1 (early / not enough signal): Output ONLY Situation, Current State, Customer Needs, \
+and Open Questions. DO NOT output Proposed Solution Architecture, Key Recommendations, \
+Sources, or Architecture Diagram — omit those sections entirely.
 - STAGE 2 (goal becoming clear, architecture direction emerging): Include tentative Architecture \
-with explicit [ASSUMPTION: ...] labels. Keep Recommendations to 2-3 talking points.
+with explicit [ASSUMPTION: ...] labels. Keep Recommendations to 2-3 talking points. \
+Omit Architecture Diagram.
 - STAGE 3 (clear customer picture): Full architecture, 3-5 prioritized recommendations, \
 mandatory Mermaid diagram using graph LR syntax.
 
@@ -93,22 +95,23 @@ OUTPUT FORMAT — use exactly these headers:
 **Open Questions:**
 [Questions raised in the meeting not yet answered, or gaps in your understanding]
 
+--- Stage 2 and 3 only ---
+
 **Proposed Solution Architecture:**
-[Stage 1: "Gathering context — not enough signal yet."
- Stage 2: Tentative direction with [ASSUMPTION: ...] labels for anything unconfirmed
+[Stage 2: Tentative direction with [ASSUMPTION: ...] labels for anything unconfirmed
  Stage 3: Specific AWS services, how they connect, why this fits the customer]
 
 **Key Recommendations:**
-[Stage 1: "Gathering context — not enough signal yet."
- Stage 2: 2-3 tentative talking points the SA can explore
+[Stage 2: 2-3 tentative talking points the SA can explore
  Stage 3: 3-5 prioritized, specific, actionable recommendations grounded in the KB]
 
 **Sources:**
 [List source URLs from the knowledge base that grounded your recommendations]
 
+--- Stage 3 only ---
+
 **Architecture Diagram:**
-[Stage 1 & 2: omit entirely
- Stage 3: Mermaid diagram, graph LR syntax, showing the proposed architecture]
+[Mermaid diagram, graph LR syntax, showing the proposed architecture]
 
 IMPORTANT:
 - Be specific — name actual AWS services, not generic "cloud solution"

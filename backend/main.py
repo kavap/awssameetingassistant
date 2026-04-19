@@ -403,17 +403,25 @@ async def manual_ask(body: dict):
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await ws_manager.connect(websocket)
-    await websocket.send_json({
-        "type": "ccm_update",
-        "ts": time.time(),
-        "payload": ccm_engine.get_state_snapshot(),
-    })
     try:
+        # Send initial state — may fail if React StrictMode cleanup already closed the socket
+        try:
+            await websocket.send_json({
+                "type": "ccm_update",
+                "ts": time.time(),
+                "payload": ccm_engine.get_state_snapshot(),
+            })
+        except Exception as e:
+            logger.debug(f"WS initial send failed (likely StrictMode first-mount cleanup): {e}")
+            return  # finally block below will still call disconnect()
+
         while True:
             data = await websocket.receive_text()
             logger.debug(f"WS client message: {data[:100]}")
     except WebSocketDisconnect:
-        ws_manager.disconnect(websocket)
+        pass
     except Exception as e:
         logger.warning(f"WS error: {e}")
+    finally:
+        ws_manager.disconnect(websocket)
         ws_manager.disconnect(websocket)
