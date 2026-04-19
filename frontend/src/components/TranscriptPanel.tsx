@@ -14,7 +14,7 @@ export function TranscriptPanel() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-3 py-2 border-b border-slate-700 flex items-center gap-2">
+      <div className="px-3 py-2 border-b border-slate-700 flex items-center gap-2 shrink-0">
         <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
             d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
@@ -38,15 +38,16 @@ export function TranscriptPanel() {
           </div>
         )}
 
-        {/* Render last 50 chunks for performance */}
-        {transcriptChunks.slice(-50).map((chunk) => (
+        {/* Full transcript — all chunks, scroll to bottom */}
+        {transcriptChunks.map((chunk) => (
           <TranscriptChunkItem key={chunk.id} chunk={chunk} />
         ))}
 
         {/* Partial / in-progress text */}
         {partialText && (
-          <div className="flex gap-3 py-1 px-2 text-sm leading-relaxed">
-            <span className="text-slate-500 tabular-nums text-xs pt-0.5 shrink-0 w-20" />
+          <div className="flex gap-2 py-1 px-2 text-sm leading-relaxed">
+            <span className="text-slate-500 tabular-nums text-xs pt-0.5 shrink-0 w-[4.5rem]" />
+            <span className="text-slate-500 w-10 shrink-0" />
             <span className="text-slate-500 italic">{partialText}</span>
           </div>
         )}

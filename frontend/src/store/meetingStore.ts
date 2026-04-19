@@ -52,9 +52,8 @@ export const useMeetingStore = create<MeetingStore>((set) => ({
         isPartial: false,
       };
       const chunks = [...state.transcriptChunks, chunk];
-      // Keep last 200 final chunks
       return {
-        transcriptChunks: chunks.length > 200 ? chunks.slice(-200) : chunks,
+        transcriptChunks: chunks,
         partialText: "",
       };
     }),

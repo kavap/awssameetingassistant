@@ -21,7 +21,6 @@ function highlightText(text: string): React.ReactNode[] {
     ...COMPETITOR_TERMS.map((t) => ({ term: t, cls: "text-amber-400 font-medium" })),
   ].sort((a, b) => b.term.length - a.term.length);
 
-  // Build combined regex
   const pattern = new RegExp(
     `(${allTerms.map((t) => t.term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`,
     "gi"
@@ -29,16 +28,8 @@ function highlightText(text: string): React.ReactNode[] {
 
   const parts = text.split(pattern);
   return parts.map((part, i) => {
-    const match = allTerms.find(
-      (t) => t.term.toLowerCase() === part.toLowerCase()
-    );
-    if (match) {
-      return (
-        <span key={i} className={match.cls}>
-          {part}
-        </span>
-      );
-    }
+    const match = allTerms.find((t) => t.term.toLowerCase() === part.toLowerCase());
+    if (match) return <span key={i} className={match.cls}>{part}</span>;
     return <span key={i}>{part}</span>;
   });
 }
@@ -51,17 +42,28 @@ function formatTime(ts: number): string {
   });
 }
 
+/** Map raw Transcribe speaker IDs ("spk_0", "spk_1") to readable labels. */
+function formatSpeaker(speaker: string | null): string {
+  if (!speaker) return "—";
+  // Transcribe format: "spk_0", "spk_1", etc.
+  const m = speaker.match(/(\d+)$/);
+  if (m) return `Spk ${parseInt(m[1]) + 1}`;
+  return speaker;
+}
+
+const SPEAKER_COLORS = [
+  "text-emerald-400",
+  "text-violet-400",
+  "text-cyan-400",
+  "text-pink-400",
+  "text-orange-400",
+];
+
 function speakerColor(speaker: string | null): string {
-  if (!speaker) return "text-slate-400";
-  const colors = [
-    "text-emerald-400",
-    "text-violet-400",
-    "text-cyan-400",
-    "text-pink-400",
-    "text-orange-400",
-  ];
-  const idx = parseInt(speaker.replace(/\D/g, "") || "0") % colors.length;
-  return colors[idx];
+  if (!speaker) return "text-slate-600";
+  const m = speaker.match(/(\d+)$/);
+  const idx = m ? parseInt(m[1]) % SPEAKER_COLORS.length : 0;
+  return SPEAKER_COLORS[idx];
 }
 
 interface Props {
@@ -70,16 +72,14 @@ interface Props {
 
 export function TranscriptChunkItem({ chunk }: Props) {
   return (
-    <div className="flex gap-3 py-1 px-2 hover:bg-slate-800/40 rounded text-sm leading-relaxed">
-      <span className="text-slate-500 tabular-nums text-xs pt-0.5 shrink-0 w-20">
+    <div className="flex gap-2 py-1 px-2 hover:bg-slate-800/40 rounded text-sm leading-relaxed">
+      <span className="text-slate-500 tabular-nums text-xs pt-0.5 shrink-0 w-[4.5rem]">
         {formatTime(chunk.timestamp)}
       </span>
-      {chunk.speaker && (
-        <span className={`text-xs pt-0.5 shrink-0 w-14 ${speakerColor(chunk.speaker)}`}>
-          {chunk.speaker}
-        </span>
-      )}
-      <span className="text-slate-200">{highlightText(chunk.text)}</span>
+      <span className={`text-xs pt-0.5 shrink-0 w-10 font-medium ${speakerColor(chunk.speaker)}`}>
+        {formatSpeaker(chunk.speaker)}
+      </span>
+      <span className="text-slate-200 min-w-0">{highlightText(chunk.text)}</span>
     </div>
   );
 }
