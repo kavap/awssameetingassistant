@@ -63,25 +63,44 @@ function SourcesList({ sources }: { sources: string[] }) {
   );
 }
 
+function isMermaidCode(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  return t.startsWith("graph ") || t.startsWith("flowchart ") ||
+    t.startsWith("sequencediagram") || t.startsWith("classDiagram".toLowerCase()) ||
+    t.startsWith("erdiagram") || t.startsWith("gantt");
+}
+
+function safeBtoa(str: string): string {
+  try {
+    // Unicode-safe base64 encode
+    return btoa(unescape(encodeURIComponent(str)));
+  } catch {
+    return "";
+  }
+}
+
 function MermaidDiagram({ source }: { source: string }) {
-  if (!source?.trim()) return null;
-  // Render raw mermaid source in a code block — full mermaid rendering
-  // requires dynamic import which adds bundle weight; SA can paste into mermaid.live
+  const text = source?.trim();
+  if (!text || !isMermaidCode(text)) return null;
+
+  const encoded = safeBtoa(text);
   return (
     <div className="mb-3">
       <div className="flex items-center gap-2 mb-1">
         <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Architecture Diagram</h4>
-        <a
-          href={`https://mermaid.live/edit#pako:${btoa(source)}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs text-blue-400 hover:text-blue-300"
-        >
-          Open in Mermaid ↗
-        </a>
+        {encoded && (
+          <a
+            href={`https://mermaid.live/edit#pako:${encoded}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-blue-400 hover:text-blue-300"
+          >
+            Open in Mermaid ↗
+          </a>
+        )}
       </div>
       <pre className="bg-slate-900 border border-slate-700 rounded p-2 text-xs text-slate-300 overflow-x-auto whitespace-pre-wrap">
-        {source}
+        {text}
       </pre>
     </div>
   );

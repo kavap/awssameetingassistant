@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { Component, useState } from "react";
+import type { ReactNode } from "react";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useMeetingStore } from "./store/meetingStore";
 import { TranscriptPanel } from "./components/TranscriptPanel";
@@ -6,6 +7,33 @@ import { AnalysisPanel } from "./components/AnalysisPanel";
 import { StartMeetingModal } from "./components/StartMeetingModal";
 import type { MeetingType } from "./types";
 import "./index.css";
+
+class PanelErrorBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(e: Error) {
+    return { error: e.message };
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="flex flex-col items-center justify-center h-full text-center px-4">
+          <p className="text-xs text-red-400 mb-2">Panel render error</p>
+          <p className="text-xs text-slate-600 font-mono">{this.state.error}</p>
+          <button
+            onClick={() => this.setState({ error: null })}
+            className="mt-3 px-3 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 rounded"
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const BACKEND = "http://localhost:8000";
 
@@ -131,7 +159,9 @@ export default function App() {
             </span>
           </div>
           <div className="flex-1 min-h-0 flex flex-col">
-            <AnalysisPanel />
+            <PanelErrorBoundary>
+              <AnalysisPanel />
+            </PanelErrorBoundary>
           </div>
         </div>
       </div>
