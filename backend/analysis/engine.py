@@ -494,10 +494,13 @@ class AnalysisEngine:
     # ------------------------------------------------------------------
 
     def _determine_stage(self, ready: bool) -> AnalysisStage:
-        if not ready or self._segment_count < 10:
+        # Stage 1: < 6 segments or not ready (gathering context)
+        if not ready or self._segment_count < 6:
             return 1
-        if self._segment_count < 25 or self._cycle_count < 4:
+        # Stage 2: 6-14 segments (direction emerging, tentative architecture)
+        if self._segment_count < 15:
             return 2
+        # Stage 3: 15+ segments (full architecture, recommendations, diagram)
         return 3
 
     @staticmethod
