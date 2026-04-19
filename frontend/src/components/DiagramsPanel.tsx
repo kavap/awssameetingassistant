@@ -25,6 +25,30 @@ mermaid.initialize({
 // Global counter for truly unique IDs — avoids StrictMode double-invoke collisions
 let _mermaidIdCounter = 0;
 
+// Global render queue — mermaid uses shared internal state and fails with
+// concurrent render() calls (React mounts all three DiagramBlock components at once).
+// Serialising through this queue matches the behaviour of the debug HTML page
+// where diagrams are awaited sequentially and render correctly.
+let _renderQueue: Promise<void> = Promise.resolve();
+
+function enqueueMermaidRender(
+  id: string,
+  source: string,
+  isCancelled: () => boolean,
+): Promise<{ svg: string }> {
+  return new Promise<{ svg: string }>((resolve, reject) => {
+    _renderQueue = _renderQueue.then(async () => {
+      if (isCancelled()) { resolve({ svg: "" }); return; }
+      try {
+        const result = await mermaid.render(id, source);
+        resolve(result);
+      } catch (err) {
+        reject(err);
+      }
+    });
+  });
+}
+
 function extractMermaidCode(raw: string): string {
   if (!raw) return "";
 
@@ -148,8 +172,8 @@ function MermaidRender({ source }: MermaidRenderProps) {
       const cleanSource = sanitizeMermaid(source);
       try {
         document.getElementById(id)?.remove();
-        const { svg } = await mermaid.render(id, cleanSource);
-        if (cancelled) return;
+        const { svg } = await enqueueMermaidRender(id, cleanSource, () => cancelled);
+        if (cancelled || !svg) return;
         renderedRef.current = source;
         setError(null);
         if (containerRef.current) {
