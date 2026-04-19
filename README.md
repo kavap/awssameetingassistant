@@ -68,8 +68,8 @@ WebSocket → React Frontend  (live transcript + recommendation cards)
 
 Enable in **AWS Console → Bedrock → Model access** (us-east-1):
 - `cohere.embed-english-v3` — embeddings for the knowledge base
-- `anthropic.claude-3-5-haiku-20241022-v1:0` — reranking
-- `anthropic.claude-3-7-sonnet-20250219-v1:0` — recommendation synthesis
+- `anthropic.claude-haiku-4-5-20251001-v1:0` — reranking / CCM extraction
+- `anthropic.claude-sonnet-4-6-20250514-v1:0` — recommendation synthesis
 
 ---
 
