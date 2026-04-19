@@ -25,10 +25,23 @@ mermaid.initialize({
 // Global counter for truly unique IDs — avoids StrictMode double-invoke collisions
 let _mermaidIdCounter = 0;
 
-function stripMermaidFence(raw: string): string {
-  const fenced = raw?.trim().match(/^```(?:mermaid)?\s*\n?([\s\S]*?)\n?```\s*$/i);
-  const text = fenced ? fenced[1].trim() : (raw?.trim() ?? "");
-  // Replace literal \n — Mermaid doesn't support newlines inside labels
+function extractMermaidCode(raw: string): string {
+  if (!raw) return "";
+
+  // 1. Strip ```mermaid ... ``` fences if present
+  const fenced = raw.trim().match(/^```(?:mermaid)?\s*\n?([\s\S]*?)\n?```\s*$/i);
+  let text = fenced ? fenced[1].trim() : raw.trim();
+
+  // 2. If Sonnet added a preamble sentence before the diagram, find where it starts
+  //    Look for first line starting with flowchart, graph, sequenceDiagram etc.
+  if (!isMermaidCode(text)) {
+    const mermaidStart = text.search(/^(flowchart|graph)\s+(LR|TD|RL|BT)/m);
+    if (mermaidStart !== -1) {
+      text = text.slice(mermaidStart).trim();
+    }
+  }
+
+  // 3. Replace literal \n in labels
   return text.replace(/\\n/g, " ");
 }
 
@@ -90,12 +103,14 @@ function MermaidRender({ source }: MermaidRenderProps) {
   useEffect(() => {
     if (!containerRef.current || !source || source === renderedRef.current) return;
 
+    let cancelled = false;
     (async () => {
       const id = `mermaid_diagram_${++_mermaidIdCounter}`;
       try {
         document.getElementById(id)?.remove();
         const cleanSource = sanitizeMermaid(source);
         const { svg } = await mermaid.render(id, cleanSource);
+        if (cancelled) return;
         renderedRef.current = source;
         setError(null);
         if (containerRef.current) {
@@ -108,11 +123,16 @@ function MermaidRender({ source }: MermaidRenderProps) {
           }
         }
       } catch (err) {
+        if (cancelled) return;
         const msg = String(err);
         setError(msg);
         console.warn("[MermaidRender] render failed:", msg, "\nSource:", source);
       }
     })();
+    return () => {
+      cancelled = true;
+      renderedRef.current = ""; // Reset so remount triggers a fresh render
+    };
   }, [source]);
 
   if (error) {
@@ -143,7 +163,7 @@ function DiagramBlock({ title, subtitle, source, accentClass, emptyMessage }: Di
   let valid = false;
   let encoded = "";
   try {
-    text = stripMermaidFence(source ?? "");
+    text = extractMermaidCode(source ?? "");
     valid = !!(text && isMermaidCode(text));
     encoded = valid ? safeBtoa(text) : "";
   } catch {
