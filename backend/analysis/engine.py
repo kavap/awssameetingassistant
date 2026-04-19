@@ -73,7 +73,8 @@ def _call_sonnet(system: str, user: str, max_tokens: int = 1200) -> str:
     # Try configured model first; if ValidationException, try common fallback IDs
     model_candidates = [
         settings.bedrock_sonnet_model,
-        "us.anthropic.claude-sonnet-4-6-20250514-v1:0",
+        "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        "us.anthropic.claude-sonnet-4-20250514-v1:0",
         "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
         "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
     ]
