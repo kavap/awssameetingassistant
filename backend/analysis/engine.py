@@ -22,6 +22,7 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 
 import boto3
+from botocore.config import Config
 
 from backend.config import settings
 from .models import AnalysisResult, AnalysisStage, MEETING_TYPES
@@ -39,7 +40,15 @@ MAX_TRANSCRIPT_SEGMENTS = 100
 MAX_KB_RESULTS = 25
 
 _executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="analysis")
-_bedrock = boto3.client("bedrock-runtime", region_name=settings.aws_region)
+_bedrock = boto3.client(
+    "bedrock-runtime",
+    region_name=settings.aws_region,
+    config=Config(
+        read_timeout=300,        # 5 min — large Sonnet responses can be slow
+        connect_timeout=10,
+        retries={"max_attempts": 0},  # we handle retries ourselves via fallback chain
+    ),
+)
 
 
 # ---------------------------------------------------------------------------
