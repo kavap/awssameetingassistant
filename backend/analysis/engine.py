@@ -170,6 +170,7 @@ def _build_result(
     ready: bool,
     reasoning: str,
     cycle_count: int,
+    segment_count: int,
     is_steered: bool,
 ) -> AnalysisResult:
     s = _extract_sections(raw)
@@ -198,6 +199,7 @@ def _build_result(
         sources=_extract_sources(s),
         mermaid_diagram=mermaid,
         cycle_count=cycle_count,
+        segment_count=segment_count,
         is_steered=is_steered,
     )
 
@@ -490,7 +492,7 @@ class AnalysisEngine:
             )
             logger.debug(f"[phase3 sonnet raw first 2000] {raw[:2000]!r}")
             result = _build_result(raw, stage, ready, reasoning,
-                                   self._cycle_count, is_steered)
+                                   self._cycle_count, self._segment_count, is_steered)
             track = "B" if is_steered else "A"
             logger.info(
                 f"[phase3 result] cycle={self._cycle_count} track={track} stage={stage} "
@@ -506,6 +508,7 @@ class AnalysisEngine:
                 reasoning=reasoning,
                 situation="Analysis failed — see backend logs.",
                 cycle_count=self._cycle_count,
+                segment_count=self._segment_count,
                 is_steered=is_steered,
             )
 
@@ -514,13 +517,13 @@ class AnalysisEngine:
     # ------------------------------------------------------------------
 
     def _determine_stage(self, ready: bool) -> AnalysisStage:
-        # Stage 1: < 6 segments or not ready (gathering context)
-        if not ready or self._segment_count < 6:
+        # Stage 1: < 3 final segments or not ready (gathering context)
+        if not ready or self._segment_count < 3:
             return 1
-        # Stage 2: 6-14 segments (direction emerging, tentative architecture)
-        if self._segment_count < 15:
+        # Stage 2: 3-7 final segments (direction emerging, tentative architecture)
+        if self._segment_count < 8:
             return 2
-        # Stage 3: 15+ segments (full architecture, recommendations, diagram)
+        # Stage 3: 8+ final segments (full architecture, recommendations, diagram)
         return 3
 
     @staticmethod

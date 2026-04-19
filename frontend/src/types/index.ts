@@ -63,6 +63,7 @@ export interface AnalysisResult {
   sources: string[];
   mermaid_diagram: string;
   cycle_count: number;
+  segment_count?: number;
   is_steered: boolean;
   timestamp: number;
 }

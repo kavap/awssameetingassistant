@@ -37,6 +37,7 @@ class AnalysisResult:
     sources: list[str] = field(default_factory=list)
     mermaid_diagram: str = ""
     cycle_count: int = 0
+    segment_count: int = 0         # AnalysisEngine final-segment count (for stage debug)
     is_steered: bool = False      # True = Track B (directive-influenced)
     timestamp: float = field(default_factory=time.time)
 
@@ -55,6 +56,7 @@ class AnalysisResult:
             "sources": self.sources,
             "mermaid_diagram": self.mermaid_diagram,
             "cycle_count": self.cycle_count,
+            "segment_count": self.segment_count,
             "is_steered": self.is_steered,
             "timestamp": self.timestamp,
         }

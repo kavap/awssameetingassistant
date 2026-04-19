@@ -127,6 +127,12 @@ function AnalysisView({ result }: { result: AnalysisResult }) {
         <span className={`font-semibold ${stage.color}`}>{stage.label}</span>
         <span className="text-slate-500">·</span>
         <span className="text-slate-500">Cycle {result.cycle_count}</span>
+        {result.segment_count !== undefined && (
+          <>
+            <span className="text-slate-500">·</span>
+            <span className="text-slate-500">{result.segment_count} final segs</span>
+          </>
+        )}
         {result.is_steered && (
           <>
             <span className="text-slate-500">·</span>
