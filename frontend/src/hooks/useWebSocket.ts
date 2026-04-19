@@ -9,6 +9,7 @@ export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
   const retriesRef = useRef(0);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const intentionalCloseRef = useRef(false);
 
   const {
     appendFinalChunk,
@@ -21,6 +22,7 @@ export function useWebSocket() {
 
   useEffect(() => {
     function connect() {
+      intentionalCloseRef.current = false;
       setConnectionStatus("connecting");
       const ws = new WebSocket(WS_URL);
       wsRef.current = ws;
@@ -80,7 +82,7 @@ export function useWebSocket() {
         setConnectionStatus("disconnected");
         wsRef.current = null;
 
-        if (retriesRef.current < MAX_RETRIES) {
+        if (!intentionalCloseRef.current && retriesRef.current < MAX_RETRIES) {
           const delay = Math.min(500 * 2 ** retriesRef.current, 8000);
           retriesRef.current++;
           retryTimerRef.current = setTimeout(connect, delay);
@@ -95,6 +97,7 @@ export function useWebSocket() {
     connect();
 
     return () => {
+      intentionalCloseRef.current = true;
       if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
       wsRef.current?.close();
     };
