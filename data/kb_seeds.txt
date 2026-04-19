@@ -1,0 +1,33 @@
+# AWS KB seed topics for scrape_aws_docs.py
+# One topic per line. The scraper will find top docs pages for each.
+
+Amazon S3 storage classes and intelligent tiering
+Amazon Redshift architecture and best practices
+AWS Glue ETL and data catalog
+Amazon Athena query optimization
+AWS Lake Formation data lake permissions
+Amazon Kinesis Data Streams real-time processing
+Amazon MSK Kafka managed streaming
+Amazon DynamoDB design patterns and best practices
+Amazon Aurora vs RDS comparison
+Amazon RDS Proxy connection pooling
+AWS Database Migration Service DMS
+Amazon Bedrock foundation models and API
+Amazon SageMaker training and deployment
+Amazon Bedrock Knowledge Bases RAG
+AWS Lambda serverless best practices
+Amazon EKS Kubernetes on AWS
+AWS Fargate container deployment
+Amazon EC2 instance types and Graviton
+AWS Auto Scaling and load balancing
+AWS Well-Architected Framework pillars
+AWS Cost Optimization Savings Plans Reserved Instances
+AWS IAM roles policies best practices
+Amazon VPC networking and connectivity
+AWS Direct Connect and Site-to-Site VPN
+AWS Transit Gateway multi-account networking
+Amazon CloudWatch observability and alarms
+AWS Organizations multi-account strategy
+AWS Control Tower landing zone
+Amazon EventBridge event-driven architecture
+AWS Step Functions workflow orchestration

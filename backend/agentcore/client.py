@@ -42,6 +42,7 @@ async def invoke_recommendation(
     query: str,
     session_id: str,
     customer_context: str = "",
+    meeting_type: str = "Customer Meeting",
 ) -> dict | None:
     """Invoke the AgentCore Recommendation Agent asynchronously.
 
@@ -55,6 +56,7 @@ async def invoke_recommendation(
         "context": context_snapshot,
         "query": query,
         "customer_context": customer_context,
+        "meeting_type": meeting_type,
     }
 
     loop = asyncio.get_event_loop()

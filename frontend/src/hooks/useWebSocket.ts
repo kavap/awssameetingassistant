@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { CCMState, RecommendationCard, WsMessage } from "../types";
+import type { AnalysisResult, CCMState, RecommendationCard, WsMessage } from "../types";
 import { useMeetingStore } from "../store/meetingStore";
 
 const WS_URL = "ws://localhost:8000/ws";
@@ -17,6 +17,8 @@ export function useWebSocket() {
     setPartialText,
     prependRecommendation,
     setCCMState,
+    setAnalysisTrackA,
+    setAnalysisTrackB,
     setConnectionStatus,
     setMeetingStatus,
   } = useMeetingStore();
@@ -63,6 +65,14 @@ export function useWebSocket() {
           }
           case "ccm_update": {
             setCCMState(msg.payload as CCMState);
+            break;
+          }
+          case "analysis_update": {
+            setAnalysisTrackA(msg.payload as AnalysisResult);
+            break;
+          }
+          case "steered_analysis_update": {
+            setAnalysisTrackB(msg.payload as AnalysisResult);
             break;
           }
           case "meeting_started": {

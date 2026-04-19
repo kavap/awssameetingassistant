@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type {
+  AnalysisResult,
   CCMState,
   ConnectionStatus,
   MeetingStatus,
@@ -14,6 +15,8 @@ interface MeetingStore {
   partialText: string;
   recommendations: RecommendationCard[];
   ccmState: CCMState | null;
+  analysisTrackA: AnalysisResult | null;
+  analysisTrackB: AnalysisResult | null;
   connectionStatus: ConnectionStatus;
   meetingStatus: MeetingStatus;
 
@@ -22,6 +25,8 @@ interface MeetingStore {
   prependRecommendation: (card: RecommendationCard) => void;
   dismissRecommendation: (id: string) => void;
   setCCMState: (state: CCMState) => void;
+  setAnalysisTrackA: (result: AnalysisResult) => void;
+  setAnalysisTrackB: (result: AnalysisResult) => void;
   setConnectionStatus: (status: ConnectionStatus) => void;
   setMeetingStatus: (status: MeetingStatus) => void;
   reset: () => void;
@@ -32,6 +37,8 @@ export const useMeetingStore = create<MeetingStore>((set) => ({
   partialText: "",
   recommendations: [],
   ccmState: null,
+  analysisTrackA: null,
+  analysisTrackB: null,
   connectionStatus: "disconnected",
   meetingStatus: "idle",
 
@@ -67,6 +74,10 @@ export const useMeetingStore = create<MeetingStore>((set) => ({
 
   setCCMState: (ccmState) => set({ ccmState }),
 
+  setAnalysisTrackA: (result) => set({ analysisTrackA: result }),
+
+  setAnalysisTrackB: (result) => set({ analysisTrackB: result }),
+
   setConnectionStatus: (connectionStatus) => set({ connectionStatus }),
 
   setMeetingStatus: (meetingStatus) => set({ meetingStatus }),
@@ -77,6 +88,8 @@ export const useMeetingStore = create<MeetingStore>((set) => ({
       partialText: "",
       recommendations: [],
       ccmState: null,
+      analysisTrackA: null,
+      analysisTrackB: null,
       meetingStatus: "idle",
     }),
 }));

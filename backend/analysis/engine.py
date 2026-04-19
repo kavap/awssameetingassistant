@@ -1,0 +1,443 @@
+"""Cadence-based staged analysis engine.
+
+Runs every ANALYZE_EVERY final transcript segments.
+Two-phase per cycle:
+  Phase 1 (Haiku)  — readiness check + search query generation
+  Phase 2 (Sonnet) — staged analysis with accumulated KB context
+
+Produces:
+  Track A — autonomous analysis (always)
+  Track B — directive-steered analysis (when SA directives exist)
+
+Both tracks are broadcast over WebSocket as analysis_update / steered_analysis_update.
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import re
+import time
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
+
+import boto3
+
+from backend.config import settings
+from .models import AnalysisResult, AnalysisStage, MEETING_TYPES
+from .prompts import (
+    QUERY_GEN_PROMPT,
+    ANALYSIS_PROMPT,
+    DIRECTIVE_EXTENSION,
+    MEETING_TYPE_PROMPTS,
+)
+
+logger = logging.getLogger(__name__)
+
+ANALYZE_EVERY = 5        # run a cycle every N final segments
+MAX_TRANSCRIPT_SEGMENTS = 100
+MAX_KB_RESULTS = 25
+
+_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="analysis")
+_bedrock = boto3.client("bedrock-runtime", region_name=settings.aws_region)
+
+
+# ---------------------------------------------------------------------------
+# Low-level Bedrock helpers (sync — run in executor)
+# ---------------------------------------------------------------------------
+
+def _call_haiku(prompt: str, max_tokens: int = 300) -> str:
+    body = json.dumps({
+        "anthropic_version": "bedrock-2023-05-31",
+        "max_tokens": max_tokens,
+        "temperature": 0.0,
+        "messages": [{"role": "user", "content": prompt}],
+    })
+    resp = _bedrock.invoke_model(
+        modelId=settings.bedrock_haiku_model,
+        body=body,
+        contentType="application/json",
+        accept="application/json",
+    )
+    return json.loads(resp["body"].read())["content"][0]["text"].strip()
+
+
+def _call_sonnet(system: str, user: str, max_tokens: int = 1200) -> str:
+    body = json.dumps({
+        "anthropic_version": "bedrock-2023-05-31",
+        "max_tokens": max_tokens,
+        "temperature": 0.1,
+        "system": system,
+        "messages": [{"role": "user", "content": user}],
+    })
+    resp = _bedrock.invoke_model(
+        modelId=settings.bedrock_sonnet_model,
+        body=body,
+        contentType="application/json",
+        accept="application/json",
+    )
+    return json.loads(resp["body"].read())["content"][0]["text"].strip()
+
+
+def _parse_json_safe(text: str) -> dict:
+    """Extract JSON from text that may have markdown fences or preamble."""
+    text = text.strip()
+    if "```" in text:
+        for part in text.split("```"):
+            part = part.strip()
+            if part.startswith("json"):
+                part = part[4:].strip()
+            if part.startswith("{"):
+                text = part
+                break
+    start, end = text.find("{"), text.rfind("}")
+    if start == -1 or end < start:
+        raise ValueError(f"No JSON in: {text[:200]!r}")
+    return json.loads(text[start:end + 1])
+
+
+# ---------------------------------------------------------------------------
+# Section extraction helpers
+# ---------------------------------------------------------------------------
+
+_SECTION_RE = re.compile(
+    r"\*\*(Situation|Current State|Customer Needs|Open Questions"
+    r"|Proposed Solution Architecture|Key Recommendations|Sources"
+    r"|Architecture Diagram):\*\*\s*(.*?)(?=\*\*\w|$)",
+    re.DOTALL,
+)
+
+
+def _extract_sections(text: str) -> dict[str, str]:
+    sections: dict[str, str] = {}
+    for m in _SECTION_RE.finditer(text):
+        sections[m.group(1).strip()] = m.group(2).strip()
+    return sections
+
+
+def _extract_sources(sections: dict[str, str]) -> list[str]:
+    raw = sections.get("Sources", "")
+    return [u.strip() for u in re.findall(r"https?://\S+", raw)]
+
+
+def _build_result(
+    raw: str,
+    stage: AnalysisStage,
+    ready: bool,
+    reasoning: str,
+    cycle_count: int,
+    is_steered: bool,
+) -> AnalysisResult:
+    s = _extract_sections(raw)
+    return AnalysisResult(
+        stage=stage,
+        ready=ready,
+        reasoning=reasoning,
+        situation=s.get("Situation", ""),
+        current_state=s.get("Current State", ""),
+        customer_needs=s.get("Customer Needs", ""),
+        open_questions=s.get("Open Questions", ""),
+        proposed_architecture=s.get("Proposed Solution Architecture", ""),
+        key_recommendations=s.get("Key Recommendations", ""),
+        sources=_extract_sources(s),
+        mermaid_diagram=s.get("Architecture Diagram", ""),
+        cycle_count=cycle_count,
+        is_steered=is_steered,
+    )
+
+
+# ---------------------------------------------------------------------------
+# AnalysisEngine
+# ---------------------------------------------------------------------------
+
+class AnalysisEngine:
+    """Cadence-based analysis engine.
+
+    Call on_final_segment() for every final transcript segment.
+    Every ANALYZE_EVERY calls it automatically fires analyze_cycle().
+    """
+
+    def __init__(
+        self,
+        ws_manager,
+        kb_retrieve,       # async callable: (query: str) -> list[dict]
+        docs_search,       # async callable: (query: str) -> list[dict]
+        meeting_type: str = "Customer Meeting",
+        customer_context: str = "",
+    ) -> None:
+        self._ws = ws_manager
+        self._kb_retrieve = kb_retrieve
+        self._docs_search = docs_search
+        self.meeting_type = meeting_type if meeting_type in MEETING_TYPES else "Customer Meeting"
+        self._customer_context = customer_context
+
+        # Session-level state
+        self._transcript_segments: list[str] = []
+        self._accumulated_kb: list[dict] = []
+        self._seen_uris: set[str] = set()
+        self._prior_queries: list[str] = []
+        self._previous_analysis_a: str = ""
+        self._previous_analysis_b: str = ""
+        self._directives: list[str] = []
+        self._cycle_count: int = 0
+        self._segment_count: int = 0
+        self._analyzing: bool = False
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def add_directive(self, directive: str) -> None:
+        d = directive.strip()
+        if d and d not in self._directives:
+            self._directives.append(d)
+            logger.info(f"SA directive added: {d!r}")
+
+    async def on_final_segment(self, text: str, ccm_state: dict) -> None:
+        """Called by the pipeline for every final transcript segment."""
+        if text.strip():
+            self._transcript_segments.append(text)
+            if len(self._transcript_segments) > MAX_TRANSCRIPT_SEGMENTS:
+                self._transcript_segments = self._transcript_segments[-MAX_TRANSCRIPT_SEGMENTS:]
+            self._segment_count += 1
+
+        if self._segment_count % ANALYZE_EVERY == 0 and not self._analyzing:
+            asyncio.create_task(self._analyze_cycle(ccm_state))
+
+    def reset(self) -> None:
+        self._transcript_segments = []
+        self._accumulated_kb = []
+        self._seen_uris = set()
+        self._prior_queries = []
+        self._previous_analysis_a = ""
+        self._previous_analysis_b = ""
+        self._directives = []
+        self._cycle_count = 0
+        self._segment_count = 0
+        self._analyzing = False
+
+    # ------------------------------------------------------------------
+    # Internal cycle
+    # ------------------------------------------------------------------
+
+    async def _analyze_cycle(self, ccm_state: dict) -> None:
+        if self._analyzing:
+            return
+        self._analyzing = True
+        try:
+            self._cycle_count += 1
+            logger.info(f"Analysis cycle {self._cycle_count} starting "
+                        f"({self._segment_count} segments so far)")
+
+            # Phase 1 — readiness + query generation
+            ready, reasoning, new_queries = await self._phase1_query_gen(ccm_state)
+
+            # Phase 2 — KB retrieval for new queries (accumulate)
+            if ready and new_queries:
+                await self._phase2_accumulate_kb(new_queries)
+
+            # Phase 3 — staged analysis (Track A)
+            stage = self._determine_stage(ready)
+            result_a = await self._phase3_analysis(
+                stage, ready, reasoning, is_steered=False
+            )
+            self._previous_analysis_a = self._result_to_markdown(result_a)
+            await self._ws.broadcast({
+                "type": "analysis_update",
+                "ts": time.time(),
+                "payload": result_a.to_dict(),
+            })
+
+            # Track B — run only when directives exist
+            if self._directives:
+                result_b = await self._phase3_analysis(
+                    stage, ready, reasoning, is_steered=True
+                )
+                self._previous_analysis_b = self._result_to_markdown(result_b)
+                await self._ws.broadcast({
+                    "type": "steered_analysis_update",
+                    "ts": time.time(),
+                    "payload": result_b.to_dict(),
+                })
+
+        except Exception as e:
+            logger.error(f"Analysis cycle error: {e}", exc_info=True)
+        finally:
+            self._analyzing = False
+
+    # ------------------------------------------------------------------
+    # Phase 1 — readiness + query gen (Haiku)
+    # ------------------------------------------------------------------
+
+    async def _phase1_query_gen(
+        self, ccm_state: dict
+    ) -> tuple[bool, str, list[str]]:
+        transcript_text = "\n".join(self._transcript_segments[-30:])
+
+        known_services = list(ccm_state.get("mentioned_services", {}).keys())
+        known_topics = [t["name"] for t in ccm_state.get("active_topics", [])]
+        known_context = ", ".join(known_services + known_topics) or "none yet"
+        prior_queries_str = "\n".join(f"- {q}" for q in self._prior_queries) or "none"
+
+        prompt = QUERY_GEN_PROMPT.format(
+            transcript=transcript_text[:3000],
+            known_context=known_context,
+            prior_queries=prior_queries_str,
+        )
+
+        loop = asyncio.get_event_loop()
+        try:
+            raw = await loop.run_in_executor(_executor, partial(_call_haiku, prompt, 400))
+            parsed = _parse_json_safe(raw)
+            ready = bool(parsed.get("ready", False))
+            reasoning = parsed.get("reasoning", "")
+            new_queries: list[str] = parsed.get("new_queries", [])
+            # Deduplicate against prior queries
+            new_queries = [
+                q for q in new_queries
+                if q not in self._prior_queries
+            ]
+            self._prior_queries.extend(new_queries)
+            logger.info(
+                f"Cycle {self._cycle_count} readiness={ready}. "
+                f"New queries: {new_queries}"
+            )
+            return ready, reasoning, new_queries
+        except Exception as e:
+            logger.warning(f"Phase 1 (query gen) failed: {e}")
+            return False, str(e), []
+
+    # ------------------------------------------------------------------
+    # Phase 2 — KB accumulation
+    # ------------------------------------------------------------------
+
+    async def _phase2_accumulate_kb(self, queries: list[str]) -> None:
+        tasks = []
+        for q in queries:
+            tasks.append(self._kb_retrieve(q))
+            tasks.append(self._docs_search(q))
+
+        all_results = await asyncio.gather(*tasks, return_exceptions=True)
+        new_count = 0
+        for results in all_results:
+            if isinstance(results, Exception):
+                continue
+            for r in results:
+                uri = r.get("url", "") or r.get("uri", "")
+                if uri and uri not in self._seen_uris:
+                    self._seen_uris.add(uri)
+                    self._accumulated_kb.append(r)
+                    new_count += 1
+
+        # Keep top MAX_KB_RESULTS by score
+        self._accumulated_kb.sort(key=lambda x: -x.get("score", 0.0))
+        self._accumulated_kb = self._accumulated_kb[:MAX_KB_RESULTS]
+        logger.info(f"KB accumulated: +{new_count} new, {len(self._accumulated_kb)} total")
+
+    # ------------------------------------------------------------------
+    # Phase 3 — staged analysis (Sonnet)
+    # ------------------------------------------------------------------
+
+    async def _phase3_analysis(
+        self,
+        stage: AnalysisStage,
+        ready: bool,
+        reasoning: str,
+        is_steered: bool,
+    ) -> AnalysisResult:
+        stage_labels = {
+            1: "STAGE 1 — Gathering context, do not speculate",
+            2: "STAGE 2 — Direction emerging, use [ASSUMPTION: ...] for anything unconfirmed",
+            3: "STAGE 3 — Clear picture, provide full architecture and recommendations",
+        }
+        stage_label = stage_labels[stage]
+
+        transcript_text = "\n".join(self._transcript_segments[-50:])
+
+        kb_lines = []
+        for r in self._accumulated_kb[:15]:
+            url = r.get("url", r.get("uri", ""))
+            title = r.get("title", url)
+            text = r.get("text", "")[:400]
+            kb_lines.append(f"Source: {url}\nTitle: {title}\n{text}")
+        kb_context = "\n---\n".join(kb_lines) if kb_lines else "No KB results yet."
+
+        customer_ctx = (
+            f"\nCustomer context from prior meetings:\n{self._customer_context}\n"
+            if self._customer_context else ""
+        )
+
+        previous = self._previous_analysis_b if is_steered and self._previous_analysis_b \
+            else self._previous_analysis_a
+        previous_section = previous if previous else "No prior analysis — this is the first cycle."
+
+        user_prompt = ANALYSIS_PROMPT.format(
+            stage_label=stage_label,
+            previous_analysis=previous_section,
+            segment_count=len(self._transcript_segments),
+            transcript=transcript_text[:4000],
+            kb_context=kb_context,
+            customer_context_section=customer_ctx,
+        )
+
+        if is_steered and self._directives:
+            directives_list = "\n".join(f"- {d}" for d in self._directives)
+            user_prompt += DIRECTIVE_EXTENSION.format(directives_list=directives_list)
+
+        role_prefix = MEETING_TYPE_PROMPTS.get(self.meeting_type, "")
+
+        loop = asyncio.get_event_loop()
+        try:
+            raw = await loop.run_in_executor(
+                _executor,
+                partial(_call_sonnet, role_prefix, user_prompt, 1500),
+            )
+            result = _build_result(raw, stage, ready, reasoning,
+                                   self._cycle_count, is_steered)
+            logger.info(
+                f"Cycle {self._cycle_count} Track {'B' if is_steered else 'A'} "
+                f"Stage {stage} complete."
+            )
+            return result
+        except Exception as e:
+            logger.error(f"Phase 3 analysis failed: {e}")
+            return AnalysisResult(
+                stage=stage,
+                ready=ready,
+                reasoning=reasoning,
+                situation="Analysis failed — see backend logs.",
+                cycle_count=self._cycle_count,
+                is_steered=is_steered,
+            )
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _determine_stage(self, ready: bool) -> AnalysisStage:
+        if not ready or self._segment_count < 10:
+            return 1
+        if self._segment_count < 25 or self._cycle_count < 4:
+            return 2
+        return 3
+
+    @staticmethod
+    def _result_to_markdown(r: AnalysisResult) -> str:
+        parts = []
+        if r.situation:
+            parts.append(f"**Situation:**\n{r.situation}")
+        if r.current_state:
+            parts.append(f"**Current State:**\n{r.current_state}")
+        if r.customer_needs:
+            parts.append(f"**Customer Needs:**\n{r.customer_needs}")
+        if r.open_questions:
+            parts.append(f"**Open Questions:**\n{r.open_questions}")
+        if r.proposed_architecture:
+            parts.append(f"**Proposed Solution Architecture:**\n{r.proposed_architecture}")
+        if r.key_recommendations:
+            parts.append(f"**Key Recommendations:**\n{r.key_recommendations}")
+        if r.sources:
+            parts.append(f"**Sources:**\n" + "\n".join(r.sources))
+        if r.mermaid_diagram:
+            parts.append(f"**Architecture Diagram:**\n{r.mermaid_diagram}")
+        return "\n\n".join(parts)

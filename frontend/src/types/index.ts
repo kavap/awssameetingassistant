@@ -47,11 +47,46 @@ export interface CCMState {
   last_updated_at: number;
 }
 
+export type AnalysisStage = 1 | 2 | 3;
+
+export interface AnalysisResult {
+  id: string;
+  stage: AnalysisStage;
+  ready: boolean;
+  reasoning: string;
+  situation: string;
+  current_state: string;
+  customer_needs: string;
+  open_questions: string;
+  proposed_architecture: string;
+  key_recommendations: string;
+  sources: string[];
+  mermaid_diagram: string;
+  cycle_count: number;
+  is_steered: boolean;
+  timestamp: number;
+}
+
+export const MEETING_TYPES = [
+  "Customer Meeting",
+  "OneTeam / Partner Meeting",
+  "SA Manager Sync",
+  "Internal Architecture Review",
+  "Competitive Deal",
+  "Migration Assessment",
+  "GenAI / ML Workshop",
+  "Cost Optimization Review",
+] as const;
+
+export type MeetingType = typeof MEETING_TYPES[number];
+
 export type WsMessageType =
   | "transcript_partial"
   | "transcript_final"
   | "recommendation"
   | "ccm_update"
+  | "analysis_update"
+  | "steered_analysis_update"
   | "meeting_started"
   | "meeting_stopped"
   | "error";

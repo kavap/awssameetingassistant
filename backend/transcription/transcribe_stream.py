@@ -46,7 +46,7 @@ async def _send_audio(stream, audio_gen):
         await stream.input_stream.end_stream()
 
 
-async def _receive_transcripts(stream, ccm_engine: CCMEngine, ws_manager, on_ccm_event):
+async def _receive_transcripts(stream, ccm_engine: CCMEngine, ws_manager, on_ccm_event, on_final_transcript=None):
     """Consumer: receive Transcribe events, update CCM, push to WebSocket."""
     try:
         async for event in stream.output_stream:
@@ -80,6 +80,10 @@ async def _receive_transcripts(stream, ccm_engine: CCMEngine, ws_manager, on_ccm
                     })
 
                     if not is_partial:
+                        # Feed AnalysisEngine cadence (every final segment)
+                        if on_final_transcript:
+                            await on_final_transcript(text)
+
                         ccm_event = await ccm_engine.process_transcript_segment(text, is_final=True)
                         if ccm_event:
                             await on_ccm_event(ccm_event)
@@ -95,6 +99,7 @@ async def stream_transcription(
     event_queue: asyncio.Queue,
     stop_event: asyncio.Event,
     on_ccm_event=None,
+    on_final_transcript=None,
 ) -> None:
     """Main transcription loop with retry logic."""
     attempt = 0
@@ -119,7 +124,7 @@ async def stream_transcription(
             _on_event = on_ccm_event or _make_queue_handler(event_queue)
             await asyncio.gather(
                 _send_audio(stream, audio_gen),
-                _receive_transcripts(stream, ccm_engine, ws_manager, _on_event),
+                _receive_transcripts(stream, ccm_engine, ws_manager, _on_event, on_final_transcript),
             )
             break  # clean exit
 

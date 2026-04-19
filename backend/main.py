@@ -10,14 +10,19 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from backend.agentcore import client as agentcore_client
 from backend.agentcore import memory as agentcore_memory
 from backend.agent.recommendation_agent import RecommendationAgent
+from backend.analysis.engine import AnalysisEngine
+from backend.analysis.models import MEETING_TYPES
 from backend.audio.capture import get_capture
 from backend.ccm.engine import CCMEngine
 from backend.config import settings
 from backend.knowledge_base import bedrock_kb
+from backend.knowledge_base.bedrock_kb import retrieve as kb_retrieve
+from backend.knowledge_base.docs_search import search_aws_docs
 from backend.websocket.manager import manager as ws_manager
 
 logging.basicConfig(
@@ -34,13 +39,17 @@ ccm_engine = CCMEngine()
 event_queue: asyncio.Queue = asyncio.Queue(maxsize=10)
 recommendation_agent = RecommendationAgent(ws_manager, event_queue)
 
+# AnalysisEngine is recreated on each meeting start (holds session state)
+analysis_engine: AnalysisEngine | None = None
+
 _meeting_task: asyncio.Task | None = None
 _stop_event: asyncio.Event = asyncio.Event()
 _session_id: str | None = None
 _customer_id: str = "anonymous"
-_customer_context: str = ""          # loaded from AgentCore Memory at session start
+_meeting_type: str = "Customer Meeting"
+_customer_context: str = ""
 
-# Per-topic cooldown for AgentCore path (mirrors RecommendationAgent cooldown)
+# Per-topic cooldown for AgentCore fast-card path
 _last_trigger: dict[str, float] = {}
 COOLDOWN_SECONDS = 20
 
@@ -62,21 +71,19 @@ def _get_stream_transcription_fn():
 
 
 # ---------------------------------------------------------------------------
-# AgentCore recommendation dispatcher (fires as background task)
+# AgentCore fast-card dispatcher (per CCM event, fire-and-forget)
 # ---------------------------------------------------------------------------
 
 async def _dispatch_recommendation(ccm_event) -> None:
-    """Fire-and-forget: invoke AgentCore Runtime and broadcast the card."""
+    """Fast-path: invoke AgentCore Runtime and broadcast a quick recommendation card."""
     ctx = ccm_event.context_snapshot
     topics = ctx.get("active_topics", [])
     topic_key = topics[0]["name"] if topics else "general"
 
-    # Cooldown: don't spam the same topic
     if time.time() - _last_trigger.get(topic_key, 0) < COOLDOWN_SECONDS:
         return
     _last_trigger[topic_key] = time.time()
 
-    # Build search query
     aws_svcs = [
         k for k, v in ctx.get("mentioned_services", {}).items()
         if v["category"] == "aws"
@@ -94,6 +101,7 @@ async def _dispatch_recommendation(ccm_event) -> None:
         query=query,
         session_id=_session_id or "no-session",
         customer_context=_customer_context,
+        meeting_type=_meeting_type,
     )
 
     if card and "error" not in card:
@@ -104,7 +112,6 @@ async def _dispatch_recommendation(ccm_event) -> None:
         })
         logger.info(f"AgentCore recommendation emitted: {card.get('title', '')}")
 
-        # Save significant trigger to Memory for future sessions
         if _customer_id != "anonymous":
             await agentcore_memory.save_session_event(
                 _customer_id,
@@ -115,8 +122,7 @@ async def _dispatch_recommendation(ccm_event) -> None:
 
 
 async def handle_ccm_event(ccm_event) -> None:
-    """Route a CCMUpdateEvent to AgentCore (preferred) or local agent (fallback)."""
-    # Push CCM state to all WebSocket clients
+    """Route a CCMUpdateEvent to AgentCore (fast card) or local agent, and broadcast CCM state."""
     await ws_manager.broadcast({
         "type": "ccm_update",
         "ts": time.time(),
@@ -124,13 +130,11 @@ async def handle_ccm_event(ccm_event) -> None:
     })
 
     if agentcore_client.is_configured():
-        # AgentCore path: fire-and-forget background task
         asyncio.create_task(
             _dispatch_recommendation(ccm_event),
             name="agentcore-recommend",
         )
     else:
-        # Local fallback: push to RecommendationAgent queue
         try:
             event_queue.put_nowait(ccm_event)
         except asyncio.QueueFull:
@@ -139,6 +143,12 @@ async def handle_ccm_event(ccm_event) -> None:
                 event_queue.put_nowait(ccm_event)
             except asyncio.QueueEmpty:
                 pass
+
+
+async def handle_final_transcript(text: str) -> None:
+    """Called for every final transcript segment — feeds the AnalysisEngine cadence."""
+    if analysis_engine is not None:
+        await analysis_engine.on_final_segment(text, ccm_engine.get_state_snapshot())
 
 
 # ---------------------------------------------------------------------------
@@ -154,7 +164,7 @@ async def lifespan(app: FastAPI):
         logger.info(f"Bedrock KB: {settings.bedrock_kb_id} ({settings.bedrock_kb_search_type})")
     else:
         logger.warning(
-            "BEDROCK_KB_ID not set — recommendations will be skipped. "
+            "BEDROCK_KB_ID not set — KB retrieval disabled. "
             "Run scripts/setup_kb.py then set BEDROCK_KB_ID in .env."
         )
 
@@ -185,7 +195,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Meeting Intelligence Assistant",
     description="Real-time AWS meeting assistant backend",
-    version="0.2.0",
+    version="0.3.0",
     lifespan=lifespan,
 )
 
@@ -196,6 +206,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ---------------------------------------------------------------------------
+# Request bodies
+# ---------------------------------------------------------------------------
+
+class StartMeetingRequest(BaseModel):
+    customer_id: str = "anonymous"
+    meeting_type: str = "Customer Meeting"
+
+
+class DirectiveRequest(BaseModel):
+    directive: str
 
 
 # ---------------------------------------------------------------------------
@@ -214,7 +237,13 @@ async def health():
         "ws_clients": ws_manager.connection_count,
         "session_id": _session_id,
         "customer_id": _customer_id,
+        "meeting_type": _meeting_type,
     }
+
+
+@app.get("/meeting/types")
+async def get_meeting_types():
+    return {"types": MEETING_TYPES}
 
 
 @app.get("/meeting/state")
@@ -223,12 +252,9 @@ async def get_meeting_state():
 
 
 @app.post("/meeting/start")
-async def start_meeting(
-    customer_id: str = "anonymous",
-    source: str = "auto",
-    wav_path: str | None = None,
-):
-    global _meeting_task, _stop_event, _session_id, _customer_id, _customer_context, _last_trigger
+async def start_meeting(body: StartMeetingRequest = StartMeetingRequest()):
+    global _meeting_task, _stop_event, _session_id, _customer_id, _meeting_type
+    global _customer_context, _last_trigger, analysis_engine
 
     if _meeting_task and not _meeting_task.done():
         return JSONResponse(
@@ -239,7 +265,8 @@ async def start_meeting(
     ccm_engine.reset()
     _stop_event = asyncio.Event()
     _session_id = str(uuid.uuid4())
-    _customer_id = customer_id.strip().lower() or "anonymous"
+    _customer_id = (body.customer_id or "anonymous").strip().lower()
+    _meeting_type = body.meeting_type if body.meeting_type in MEETING_TYPES else "Customer Meeting"
     _last_trigger = {}
 
     # Load prior customer context from AgentCore Memory
@@ -247,7 +274,16 @@ async def start_meeting(
     if _customer_context:
         logger.info(f"Loaded prior context for customer '{_customer_id}'")
 
-    capture = get_capture(wav_path)
+    # Create fresh AnalysisEngine for this session
+    analysis_engine = AnalysisEngine(
+        ws_manager=ws_manager,
+        kb_retrieve=kb_retrieve,
+        docs_search=search_aws_docs,
+        meeting_type=_meeting_type,
+        customer_context=_customer_context,
+    )
+
+    capture = get_capture(None)
     audio_gen = capture.audio_generator()
     stream_fn = _get_stream_transcription_fn()
 
@@ -259,6 +295,7 @@ async def start_meeting(
             event_queue=event_queue,
             stop_event=_stop_event,
             on_ccm_event=handle_ccm_event,
+            on_final_transcript=handle_final_transcript,
         )
 
     _meeting_task = asyncio.create_task(run_pipeline(), name="meeting-pipeline")
@@ -269,15 +306,20 @@ async def start_meeting(
         "payload": {
             "session_id": _session_id,
             "customer_id": _customer_id,
+            "meeting_type": _meeting_type,
             "stt_provider": settings.stt_provider,
             "customer_context_loaded": bool(_customer_context),
         },
     })
 
-    logger.info(f"Meeting started. Session: {_session_id}, Customer: {_customer_id}")
+    logger.info(
+        f"Meeting started. Session: {_session_id}, "
+        f"Customer: {_customer_id}, Type: {_meeting_type}"
+    )
     return {
         "session_id": _session_id,
         "customer_id": _customer_id,
+        "meeting_type": _meeting_type,
         "status": "started",
         "stt_provider": settings.stt_provider,
         "customer_context_loaded": bool(_customer_context),
@@ -292,7 +334,6 @@ async def stop_meeting():
     if _meeting_task and not _meeting_task.done():
         _meeting_task.cancel()
 
-    # Save session summary to AgentCore Memory
     if _session_id and _customer_id != "anonymous":
         await agentcore_memory.save_session_summary(
             _customer_id,
@@ -313,8 +354,24 @@ async def stop_meeting():
 
 @app.post("/meeting/reset")
 async def reset_meeting():
+    global analysis_engine
     ccm_engine.reset()
+    if analysis_engine is not None:
+        analysis_engine.reset()
     return {"status": "reset", "session_id": ccm_engine.state.session_id}
+
+
+@app.post("/meeting/directive")
+async def add_directive(body: DirectiveRequest):
+    """Inject an SA directive into the analysis engine (Track B steering)."""
+    if not body.directive.strip():
+        return JSONResponse(status_code=400, content={"error": "directive is required"})
+    if analysis_engine is None:
+        return JSONResponse(status_code=409, content={"error": "No active meeting session"})
+
+    analysis_engine.add_directive(body.directive.strip())
+    logger.info(f"SA directive injected: {body.directive!r}")
+    return {"status": "ok", "directive": body.directive.strip()}
 
 
 @app.post("/ask")
@@ -327,6 +384,8 @@ async def manual_ask(body: dict):
     ccm_event = await ccm_engine.process_transcript_segment(question + "?", is_final=True)
     if ccm_event:
         await handle_ccm_event(ccm_event)
+    # Also feed into analysis engine
+    await handle_final_transcript(question)
 
     return {"status": "queued", "question": question}
 

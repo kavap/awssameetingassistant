@@ -1,7 +1,10 @@
+import { useState } from "react";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useMeetingStore } from "./store/meetingStore";
 import { TranscriptPanel } from "./components/TranscriptPanel";
-import { RecommendationsPanel } from "./components/RecommendationsPanel";
+import { AnalysisPanel } from "./components/AnalysisPanel";
+import { StartMeetingModal } from "./components/StartMeetingModal";
+import type { MeetingType } from "./types";
 import "./index.css";
 
 const BACKEND = "http://localhost:8000";
@@ -17,13 +20,21 @@ function StatusDot({ status }: { status: string }) {
 }
 
 export default function App() {
-  useWebSocket(); // establish WS connection
+  useWebSocket();
 
   const connectionStatus = useMeetingStore((s) => s.connectionStatus);
   const meetingStatus = useMeetingStore((s) => s.meetingStatus);
+  const analysisTrackA = useMeetingStore((s) => s.analysisTrackA);
 
-  async function startMeeting() {
-    await fetch(`${BACKEND}/meeting/start`, { method: "POST" });
+  const [showModal, setShowModal] = useState(false);
+
+  async function startMeeting(customerId: string, meetingType: MeetingType) {
+    setShowModal(false);
+    await fetch(`${BACKEND}/meeting/start`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ customer_id: customerId, meeting_type: meetingType }),
+    });
   }
 
   async function stopMeeting() {
@@ -31,12 +42,12 @@ export default function App() {
   }
 
   const isRecording = meetingStatus === "recording";
+  const stage = analysisTrackA?.stage ?? null;
 
   return (
     <div className="flex flex-col h-screen bg-slate-900 text-slate-200">
       {/* Header */}
       <header className="flex items-center gap-3 px-4 py-2 border-b border-slate-700 bg-slate-900/90 backdrop-blur shrink-0">
-        {/* Logo / title */}
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 bg-blue-600 rounded flex items-center justify-center">
             <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -49,25 +60,36 @@ export default function App() {
           </span>
         </div>
 
-        {/* Recording indicator */}
+        {/* Recording + stage indicator */}
         {isRecording && (
-          <div className="flex items-center gap-1.5 text-xs text-red-400">
-            <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-            LIVE
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 text-xs text-red-400">
+              <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+              LIVE
+            </div>
+            {stage && (
+              <span className={`text-xs px-2 py-0.5 rounded-full border ${
+                stage === 3
+                  ? "text-emerald-400 bg-emerald-900/30 border-emerald-700"
+                  : stage === 2
+                  ? "text-blue-400 bg-blue-900/30 border-blue-700"
+                  : "text-yellow-400 bg-yellow-900/30 border-yellow-700"
+              }`}>
+                Stage {stage}
+              </span>
+            )}
           </div>
         )}
 
         <div className="ml-auto flex items-center gap-3">
-          {/* WS status */}
           <div className="flex items-center gap-1.5 text-xs text-slate-500">
             <StatusDot status={connectionStatus} />
             {connectionStatus}
           </div>
 
-          {/* Start / Stop */}
           {!isRecording ? (
             <button
-              onClick={startMeeting}
+              onClick={() => setShowModal(true)}
               disabled={connectionStatus !== "connected"}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs font-medium rounded transition-colors"
             >
@@ -92,27 +114,35 @@ export default function App() {
 
       {/* Main two-column layout */}
       <div className="flex flex-1 min-h-0">
-        {/* Left: Transcript (60%) */}
-        <div className="flex flex-col w-3/5 border-r border-slate-700 min-h-0">
+        {/* Left: Transcript (55%) */}
+        <div className="flex flex-col w-[55%] border-r border-slate-700 min-h-0">
           <TranscriptPanel />
         </div>
 
-        {/* Right: Recommendations (40%) */}
-        <div className="flex flex-col w-2/5 min-h-0">
-          <div className="px-3 py-2 border-b border-slate-700 flex items-center gap-2">
+        {/* Right: Analysis (45%) */}
+        <div className="flex flex-col w-[45%] min-h-0">
+          <div className="px-3 py-2 border-b border-slate-700 flex items-center gap-2 shrink-0">
             <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M13 10V3L4 14h7v7l9-11h-7z" />
+                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
             </svg>
             <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
-              Recommendations
+              Live Analysis
             </span>
           </div>
           <div className="flex-1 min-h-0 flex flex-col">
-            <RecommendationsPanel />
+            <AnalysisPanel />
           </div>
         </div>
       </div>
+
+      {/* Start Meeting Modal */}
+      {showModal && (
+        <StartMeetingModal
+          onConfirm={startMeeting}
+          onCancel={() => setShowModal(false)}
+        />
+      )}
     </div>
   );
 }

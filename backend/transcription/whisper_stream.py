@@ -89,6 +89,7 @@ async def stream_transcription(
     event_queue: asyncio.Queue,
     stop_event: asyncio.Event,
     on_ccm_event=None,
+    on_final_transcript=None,
 ) -> None:
     """Whisper-based transcription pipeline.
 
@@ -141,6 +142,10 @@ async def stream_transcription(
                             "is_partial": False,
                         },
                     })
+
+                    # Feed AnalysisEngine cadence (every final segment)
+                    if on_final_transcript:
+                        await on_final_transcript(text)
 
                     # Update CCM
                     ccm_event = await ccm_engine.process_transcript_segment(text, is_final=True)
