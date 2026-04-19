@@ -435,10 +435,10 @@ class AnalysisEngine:
         transcript_text = "\n".join(self._transcript_segments[-50:])
 
         kb_lines = []
-        for r in self._accumulated_kb[:15]:
+        for r in self._accumulated_kb[:12]:
             url = r.get("url", r.get("uri", ""))
             title = r.get("title", url)
-            text = r.get("text", "")[:400]
+            text = r.get("text", "")[:300]
             kb_lines.append(f"Source: {url}\nTitle: {title}\n{text}")
         kb_context = "\n---\n".join(kb_lines) if kb_lines else "No KB results yet."
 
@@ -449,6 +449,9 @@ class AnalysisEngine:
 
         previous = self._previous_analysis_b if is_steered and self._previous_analysis_b \
             else self._previous_analysis_a
+        # Cap previous analysis to avoid consuming too much of the output budget
+        if previous and len(previous) > 2500:
+            previous = previous[:2500] + "\n[... truncated for brevity ...]"
         previous_section = previous if previous else "No prior analysis — this is the first cycle."
 
         user_prompt = ANALYSIS_PROMPT.format(
@@ -470,9 +473,9 @@ class AnalysisEngine:
         try:
             raw = await loop.run_in_executor(
                 _executor,
-                partial(_call_sonnet, role_prefix, user_prompt, 1500),
+                partial(_call_sonnet, role_prefix, user_prompt, 4096),
             )
-            logger.debug(f"[phase3 sonnet raw first 1500] {raw[:1500]!r}")
+            logger.debug(f"[phase3 sonnet raw first 2000] {raw[:2000]!r}")
             result = _build_result(raw, stage, ready, reasoning,
                                    self._cycle_count, is_steered)
             track = "B" if is_steered else "A"
