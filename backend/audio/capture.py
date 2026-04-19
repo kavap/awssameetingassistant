@@ -23,11 +23,16 @@ class MicCapture:
     def __init__(self) -> None:
         self._queue: asyncio.Queue[bytes | None] = asyncio.Queue(maxsize=100)
         self._stream = None
+        self._loop: asyncio.AbstractEventLoop | None = None
 
     def _callback(self, indata, frames, time_info, status):
-        """sounddevice callback — runs in a separate thread."""
-        loop = asyncio.get_event_loop()
-        loop.call_soon_threadsafe(self._queue.put_nowait, bytes(indata))
+        """sounddevice callback — runs in a separate thread.
+
+        Must not call asyncio.get_event_loop() here (no event loop in this
+        thread). Use the loop captured at stream-start time instead.
+        """
+        if self._loop is not None:
+            self._loop.call_soon_threadsafe(self._queue.put_nowait, bytes(indata))
 
     async def audio_generator(self) -> AsyncGenerator[bytes, None]:
         try:
@@ -36,6 +41,9 @@ class MicCapture:
             raise RuntimeError(
                 "sounddevice is not installed. Run: uv add sounddevice"
             )
+
+        # Capture the running event loop before starting the stream
+        self._loop = asyncio.get_event_loop()
 
         self._stream = sd.RawInputStream(
             samplerate=settings.audio_sample_rate,
