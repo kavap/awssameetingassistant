@@ -45,14 +45,53 @@ function extractMermaidCode(raw: string): string {
   return text.replace(/\\n/g, " ");
 }
 
+/**
+ * Mermaid v11 flowchart does NOT support nested subgraphs.
+ * Flatten by removing inner subgraph/end wrappers while keeping their nodes.
+ */
+function flattenNestedSubgraphs(text: string): string {
+  const lines = text.split('\n');
+  const out: string[] = [];
+  let depth = 0;
+  let skipEnds = 0;
+
+  for (const line of lines) {
+    const t = line.trimStart();
+    if (/^subgraph\b/.test(t)) {
+      if (depth === 0) {
+        out.push(line);   // top-level subgraph — keep
+        depth++;
+      } else {
+        depth++;          // nested — drop header, remember to skip its closing end
+        skipEnds++;
+      }
+    } else if (/^end\s*$/.test(t)) {
+      if (skipEnds > 0) {
+        skipEnds--;       // skip the end that closed the nested subgraph
+        depth--;
+      } else {
+        out.push(line);   // real top-level end
+        depth = Math.max(0, depth - 1);
+      }
+    } else {
+      out.push(line);
+    }
+  }
+
+  return out.join('\n');
+}
+
 function sanitizeMermaid(raw: string): string {
   let text = raw;
 
   // 1. Upgrade graph LR → flowchart LR
   text = text.replace(/^graph\s+(LR|TD|RL|BT)/m, (_, dir) => `flowchart ${dir}`);
 
-  // 2. Fix subgraph IDs with spaces: "subgraph Foo Bar" → subgraph FooBar["Foo Bar"]
-  //    But leave alone ones that already have ["..."] or just a single word
+  // 2. Flatten nested subgraphs (mermaid v11 flowchart rejects them)
+  text = flattenNestedSubgraphs(text);
+
+  // 3. Fix subgraph IDs with spaces: "subgraph Foo Bar" → subgraph Foo_Bar["Foo Bar"]
+  //    Leave alone ones that already have ["..."] or are a single word
   text = text.replace(/^(\s*subgraph\s+)([A-Za-z][A-Za-z0-9 _]*)(\s*)$/gm, (_m, prefix, name, trail) => {
     if (!name.includes('[') && name.includes(' ')) {
       const id = name.trim().replace(/\s+/g, '_');
@@ -61,7 +100,7 @@ function sanitizeMermaid(raw: string): string {
     return _m;
   });
 
-  // 3. Close any unclosed subgraphs (count open vs closed)
+  // 4. Close any unclosed subgraphs (count open vs closed)
   const opens = (text.match(/^\s*subgraph\b/gm) || []).length;
   const closes = (text.match(/^\s*end\s*$/gm) || []).length;
   if (opens > closes) {
@@ -106,9 +145,9 @@ function MermaidRender({ source }: MermaidRenderProps) {
     let cancelled = false;
     (async () => {
       const id = `mermaid_diagram_${++_mermaidIdCounter}`;
+      const cleanSource = sanitizeMermaid(source);
       try {
         document.getElementById(id)?.remove();
-        const cleanSource = sanitizeMermaid(source);
         const { svg } = await mermaid.render(id, cleanSource);
         if (cancelled) return;
         renderedRef.current = source;
@@ -126,7 +165,7 @@ function MermaidRender({ source }: MermaidRenderProps) {
         if (cancelled) return;
         const msg = String(err);
         setError(msg);
-        console.warn("[MermaidRender] render failed:", msg, "\nSource:", source);
+        console.warn("[MermaidRender] render FAILED\nError:", msg, "\nSanitized source:\n", cleanSource);
       }
     })();
     return () => {
@@ -137,10 +176,13 @@ function MermaidRender({ source }: MermaidRenderProps) {
 
   if (error) {
     return (
-      <div className="p-2 text-xs text-red-400 bg-red-950/30 border-t border-red-900 max-h-[400px] overflow-y-auto">
-        <p className="font-medium mb-1">Mermaid parse error (check browser console for details):</p>
-        <p className="text-slate-500 mb-2 font-mono">{error.slice(0, 200)}</p>
-        <pre className="whitespace-pre text-slate-400 overflow-x-auto">{source}</pre>
+      <div className="p-3 text-xs bg-red-950/40 border border-red-800 rounded m-2 max-h-[400px] overflow-y-auto">
+        <p className="font-bold text-red-300 mb-1">Mermaid render error — check browser console (F12)</p>
+        <p className="text-red-400 mb-2 font-mono break-all">{error.slice(0, 300)}</p>
+        <details className="text-slate-400">
+          <summary className="cursor-pointer text-slate-500 hover:text-slate-300">Show diagram source</summary>
+          <pre className="mt-1 whitespace-pre overflow-x-auto text-slate-400">{source}</pre>
+        </details>
       </div>
     );
   }
