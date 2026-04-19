@@ -29,6 +29,9 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
+# Set analysis pipeline loggers to DEBUG for full visibility
+logging.getLogger("backend.analysis.engine").setLevel(logging.DEBUG)
+logging.getLogger("backend.main").setLevel(logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -147,8 +150,11 @@ async def handle_ccm_event(ccm_event) -> None:
 
 async def handle_final_transcript(text: str) -> None:
     """Called for every final transcript segment — feeds the AnalysisEngine cadence."""
+    logger.debug(f"[handle_final_transcript] engine={analysis_engine is not None} text={text[:60]!r}")
     if analysis_engine is not None:
         await analysis_engine.on_final_segment(text, ccm_engine.get_state_snapshot())
+    else:
+        logger.warning("[handle_final_transcript] analysis_engine is None — segment dropped")
 
 
 # ---------------------------------------------------------------------------

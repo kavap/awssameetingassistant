@@ -200,8 +200,16 @@ class AnalysisEngine:
             if len(self._transcript_segments) > MAX_TRANSCRIPT_SEGMENTS:
                 self._transcript_segments = self._transcript_segments[-MAX_TRANSCRIPT_SEGMENTS:]
             self._segment_count += 1
+            logger.debug(
+                f"[segment #{self._segment_count}] text={text[:60]!r} "
+                f"analyzing={self._analyzing} "
+                f"(next cycle at #{ANALYZE_EVERY * (self._segment_count // ANALYZE_EVERY + 1)})"
+            )
 
         if self._segment_count % ANALYZE_EVERY == 0 and not self._analyzing:
+            logger.info(
+                f"[cycle trigger] segment #{self._segment_count} → firing analysis cycle"
+            )
             asyncio.create_task(self._analyze_cycle(ccm_state))
 
     def reset(self) -> None:
@@ -242,11 +250,18 @@ class AnalysisEngine:
                 stage, ready, reasoning, is_steered=False
             )
             self._previous_analysis_a = self._result_to_markdown(result_a)
+            payload_a = result_a.to_dict()
+            logger.info(
+                f"[broadcast] analysis_update stage={payload_a['stage']} "
+                f"cycle={payload_a['cycle_count']} "
+                f"fields_nonempty={[k for k,v in payload_a.items() if v and k not in ('id','timestamp','stage','cycle_count','ready','is_steered')]}"
+            )
             await self._ws.broadcast({
                 "type": "analysis_update",
                 "ts": time.time(),
-                "payload": result_a.to_dict(),
+                "payload": payload_a,
             })
+            logger.info("[broadcast] analysis_update sent to WS manager")
 
             # Track B — run only when directives exist
             if self._directives:
@@ -254,11 +269,17 @@ class AnalysisEngine:
                     stage, ready, reasoning, is_steered=True
                 )
                 self._previous_analysis_b = self._result_to_markdown(result_b)
+                payload_b = result_b.to_dict()
+                logger.info(
+                    f"[broadcast] steered_analysis_update stage={payload_b['stage']} "
+                    f"cycle={payload_b['cycle_count']}"
+                )
                 await self._ws.broadcast({
                     "type": "steered_analysis_update",
                     "ts": time.time(),
-                    "payload": result_b.to_dict(),
+                    "payload": payload_b,
                 })
+                logger.info("[broadcast] steered_analysis_update sent")
 
         except Exception as e:
             logger.error(f"Analysis cycle error: {e}", exc_info=True)
@@ -288,6 +309,7 @@ class AnalysisEngine:
         loop = asyncio.get_event_loop()
         try:
             raw = await loop.run_in_executor(_executor, partial(_call_haiku, prompt, 400))
+            logger.debug(f"[phase1 haiku raw] {raw[:300]!r}")
             parsed = _parse_json_safe(raw)
             ready = bool(parsed.get("ready", False))
             reasoning = parsed.get("reasoning", "")
@@ -299,12 +321,12 @@ class AnalysisEngine:
             ]
             self._prior_queries.extend(new_queries)
             logger.info(
-                f"Cycle {self._cycle_count} readiness={ready}. "
-                f"New queries: {new_queries}"
+                f"[phase1 result] cycle={self._cycle_count} ready={ready} "
+                f"reasoning={reasoning[:100]!r} new_queries={new_queries}"
             )
             return ready, reasoning, new_queries
         except Exception as e:
-            logger.warning(f"Phase 1 (query gen) failed: {e}")
+            logger.warning(f"[phase1 FAILED] {e}", exc_info=True)
             return False, str(e), []
 
     # ------------------------------------------------------------------
@@ -332,7 +354,11 @@ class AnalysisEngine:
         # Keep top MAX_KB_RESULTS by score
         self._accumulated_kb.sort(key=lambda x: -x.get("score", 0.0))
         self._accumulated_kb = self._accumulated_kb[:MAX_KB_RESULTS]
-        logger.info(f"KB accumulated: +{new_count} new, {len(self._accumulated_kb)} total")
+        top_urls = [r.get("url", r.get("uri", "?"))[:60] for r in self._accumulated_kb[:5]]
+        logger.info(
+            f"[phase2 KB] +{new_count} new chunks, {len(self._accumulated_kb)} total. "
+            f"Top URIs: {top_urls}"
+        )
 
     # ------------------------------------------------------------------
     # Phase 3 — staged analysis (Sonnet)
@@ -392,15 +418,18 @@ class AnalysisEngine:
                 _executor,
                 partial(_call_sonnet, role_prefix, user_prompt, 1500),
             )
+            logger.debug(f"[phase3 sonnet raw first 500] {raw[:500]!r}")
             result = _build_result(raw, stage, ready, reasoning,
                                    self._cycle_count, is_steered)
+            track = "B" if is_steered else "A"
             logger.info(
-                f"Cycle {self._cycle_count} Track {'B' if is_steered else 'A'} "
-                f"Stage {stage} complete."
+                f"[phase3 result] cycle={self._cycle_count} track={track} stage={stage} "
+                f"situation_len={len(result.situation)} current_state_len={len(result.current_state)} "
+                f"customer_needs_len={len(result.customer_needs)} sources={len(result.sources)}"
             )
             return result
         except Exception as e:
-            logger.error(f"Phase 3 analysis failed: {e}")
+            logger.error(f"[phase3 FAILED] {e}", exc_info=True)
             return AnalysisResult(
                 stage=stage,
                 ready=ready,

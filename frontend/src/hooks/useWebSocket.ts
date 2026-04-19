@@ -44,6 +44,12 @@ export function useWebSocket() {
           return;
         }
 
+        // Debug: log every message type (suppress high-frequency transcript partials)
+        if (msg.type !== "transcript_partial") {
+          console.debug(`[WS recv] type=${msg.type} ts=${msg.ts}`);
+        }
+
+        try {
         switch (msg.type) {
           case "transcript_partial": {
             const p = msg.payload as { text: string };
@@ -68,11 +74,24 @@ export function useWebSocket() {
             break;
           }
           case "analysis_update": {
-            setAnalysisTrackA(msg.payload as AnalysisResult);
+            const ar = msg.payload as AnalysisResult;
+            console.log(
+              `[WS analysis_update] stage=${ar.stage} cycle=${ar.cycle_count} ` +
+              `situation_len=${ar.situation?.length ?? 0} ` +
+              `current_state_len=${ar.current_state?.length ?? 0} ` +
+              `customer_needs_len=${ar.customer_needs?.length ?? 0} ` +
+              `sources=${ar.sources?.length ?? 0}`,
+              ar
+            );
+            console.log("[WS analysis_update] calling setAnalysisTrackA...");
+            setAnalysisTrackA(ar);
+            console.log("[WS analysis_update] setAnalysisTrackA done");
             break;
           }
           case "steered_analysis_update": {
-            setAnalysisTrackB(msg.payload as AnalysisResult);
+            const arB = msg.payload as AnalysisResult;
+            console.log(`[WS steered_analysis_update] stage=${arB.stage} cycle=${arB.cycle_count}`, arB);
+            setAnalysisTrackB(arB);
             break;
           }
           case "meeting_started": {
@@ -87,6 +106,9 @@ export function useWebSocket() {
             console.error("Backend error:", msg.payload);
             break;
           }
+        }
+        } catch (e) {
+          console.error("WS message handling error:", e, "msg:", msg);
         }
       };
 

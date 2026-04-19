@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMeetingStore } from "../store/meetingStore";
 import { DirectivesBar } from "./DirectivesBar";
 import type { AnalysisResult } from "../types";
@@ -107,7 +107,12 @@ function MermaidDiagram({ source }: { source: string }) {
 }
 
 function AnalysisView({ result }: { result: AnalysisResult }) {
-  const stage = STAGE_CONFIG[result.stage];
+  console.log(
+    `[AnalysisView render] stage=${result.stage} cycle=${result.cycle_count} ` +
+    `situation=${result.situation?.slice(0, 60)}`
+  );
+  const stageKey = (result.stage as number) in STAGE_CONFIG ? result.stage as 1 | 2 | 3 : 1;
+  const stage = STAGE_CONFIG[stageKey];
 
   return (
     <div className="animate-fade-in">
@@ -137,8 +142,8 @@ function AnalysisView({ result }: { result: AnalysisResult }) {
       <Section title="Open Questions" content={result.open_questions} />
       <Section title="Proposed Architecture" content={result.proposed_architecture} />
       <Section title="Key Recommendations" content={result.key_recommendations} />
-      <SourcesList sources={result.sources} />
-      <MermaidDiagram source={result.mermaid_diagram} />
+      <SourcesList sources={result.sources ?? []} />
+      <MermaidDiagram source={result.mermaid_diagram ?? ""} />
     </div>
   );
 }
@@ -147,6 +152,16 @@ export function AnalysisPanel() {
   const analysisTrackA = useMeetingStore((s) => s.analysisTrackA);
   const analysisTrackB = useMeetingStore((s) => s.analysisTrackB);
   const [showSteered, setShowSteered] = useState(false);
+
+  useEffect(() => {
+    console.log(
+      "[AnalysisPanel] analysisTrackA changed:",
+      analysisTrackA
+        ? `stage=${analysisTrackA.stage} cycle=${analysisTrackA.cycle_count} ` +
+          `situation=${analysisTrackA.situation?.slice(0, 60)}`
+        : "null"
+    );
+  }, [analysisTrackA]);
 
   const activeResult = showSteered && analysisTrackB ? analysisTrackB : analysisTrackA;
 
