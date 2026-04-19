@@ -28,8 +28,13 @@ let _mermaidIdCounter = 0;
 function stripMermaidFence(raw: string): string {
   const fenced = raw?.trim().match(/^```(?:mermaid)?\s*\n?([\s\S]*?)\n?```\s*$/i);
   const text = fenced ? fenced[1].trim() : (raw?.trim() ?? "");
-  // Replace literal \n inside quoted node labels — Mermaid doesn't support them
+  // Replace literal \n — Mermaid doesn't support newlines inside labels
   return text.replace(/\\n/g, " ");
+}
+
+function sanitizeMermaid(text: string): string {
+  // If Sonnet generated graph LR, upgrade to flowchart LR (more robust in mermaid 11)
+  return text.replace(/^graph\s+(LR|TD|RL|BT)/m, (_, dir) => `flowchart ${dir}`);
 }
 
 function isMermaidCode(text: string): boolean {
@@ -65,16 +70,13 @@ function MermaidRender({ source }: MermaidRenderProps) {
     if (!containerRef.current || !source || source === renderedRef.current) return;
 
     (async () => {
-      // Each render gets a truly unique ID — prevents StrictMode double-invoke collisions
       const id = `mermaid_diagram_${++_mermaidIdCounter}`;
       try {
-        // Remove any stale element with this ID from a prior attempt
         document.getElementById(id)?.remove();
-
-        const { svg } = await mermaid.render(id, source);
+        const cleanSource = sanitizeMermaid(source);
+        const { svg } = await mermaid.render(id, cleanSource);
         renderedRef.current = source;
         setError(null);
-
         if (containerRef.current) {
           containerRef.current.innerHTML = svg;
           const svgEl = containerRef.current.querySelector("svg");

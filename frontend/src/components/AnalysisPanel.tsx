@@ -63,59 +63,6 @@ function SourcesList({ sources }: { sources: string[] }) {
   );
 }
 
-function isMermaidCode(text: string): boolean {
-  const t = text.trim().toLowerCase();
-  return t.startsWith("graph ") || t.startsWith("flowchart ") ||
-    t.startsWith("sequencediagram") || t.startsWith("classDiagram".toLowerCase()) ||
-    t.startsWith("erdiagram") || t.startsWith("gantt");
-}
-
-function safeBtoa(str: string): string {
-  try {
-    // Unicode-safe base64 encode
-    return btoa(unescape(encodeURIComponent(str)));
-  } catch {
-    return "";
-  }
-}
-
-function stripMermaidFence(raw: string): string {
-  // Strip ```mermaid ... ``` or ``` ... ``` fences if present
-  const fenced = raw.trim().match(/^```(?:mermaid)?\s*\n([\s\S]*?)\n?```\s*$/i);
-  return fenced ? fenced[1].trim() : raw.trim();
-}
-
-function MermaidDiagram({ source }: { source: string }) {
-  let text = "", encoded = "";
-  try {
-    text = stripMermaidFence(source ?? "");
-    if (!text || !isMermaidCode(text)) return null;
-    encoded = safeBtoa(text);
-  } catch {
-    return null;
-  }
-  return (
-    <div className="mb-3">
-      <div className="flex items-center gap-2 mb-1">
-        <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Architecture Diagram</h4>
-        {encoded && (
-          <a
-            href={`https://mermaid.live/edit#pako:${encoded}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-blue-400 hover:text-blue-300"
-          >
-            Open in Mermaid ↗
-          </a>
-        )}
-      </div>
-      <pre className="bg-slate-900 border border-slate-700 rounded p-2 text-xs text-slate-300 overflow-x-auto whitespace-pre-wrap">
-        {text}
-      </pre>
-    </div>
-  );
-}
-
 function AnalysisView({ result }: { result: AnalysisResult }) {
   console.log(
     `[AnalysisView render] stage=${result.stage} cycle=${result.cycle_count} ` +
@@ -159,7 +106,6 @@ function AnalysisView({ result }: { result: AnalysisResult }) {
       <Section title="Proposed Architecture" content={result.proposed_architecture} />
       <Section title="Key Recommendations" content={result.key_recommendations} />
       <SourcesList sources={result.sources ?? []} />
-      <MermaidDiagram source={result.mermaid_diagram ?? ""} />
     </div>
   );
 }

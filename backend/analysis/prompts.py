@@ -113,17 +113,27 @@ Use bullet points for clarity. Bold sub-topics are fine.]
 
 **Current State Diagram:**
 [Stage 1 and 2: omit this section entirely.
- Stage 3: Mermaid diagram using graph LR syntax showing the customer's CURRENT architecture. \
- RULES: max 12 nodes, use short single-line labels only (NO \\n in labels — use a space instead), \
- keep subgraph names short, do NOT nest more than 2 levels of subgraphs. \
- Start the diagram code immediately after this header with no extra text or commentary.]
+ Stage 3: Mermaid flowchart showing the customer's CURRENT architecture. \
+ STRICT RULES — violations will break rendering: \
+ (1) Start with exactly: flowchart LR \
+ (2) Node IDs: alphanumeric only, no spaces or special chars (e.g. HDFS, HiveMS, Teradata) \
+ (3) Node labels: plain text only, NO parentheses, NO backslashes, NO special chars (use words only) \
+ (4) Subgraph names: short plain words only, no parentheses or dashes \
+ (5) Max 10 nodes total, max 1 level of subgraph nesting \
+ (6) Edge syntax: A --> B or A --> |label| B only \
+ Start the diagram code immediately after this header with no extra text.]
 
 **Future State Diagram:**
 [Stage 1 and 2: omit this section entirely.
- Stage 3: Mermaid diagram using graph LR syntax showing the PROPOSED future AWS architecture. \
- RULES: max 12 nodes, use short single-line labels only (NO \\n in labels — use a space instead), \
- keep subgraph names short, do NOT nest more than 2 levels of subgraphs. \
- Start the diagram code immediately after this header with no extra text or commentary.]
+ Stage 3: Mermaid flowchart showing the PROPOSED future AWS architecture. \
+ STRICT RULES — violations will break rendering: \
+ (1) Start with exactly: flowchart LR \
+ (2) Node IDs: alphanumeric only, no spaces or special chars (e.g. S3, Glue, Redshift, EMR) \
+ (3) Node labels: plain text only, NO parentheses, NO backslashes, NO special chars (use words only) \
+ (4) Subgraph names: short plain words only, no parentheses or dashes \
+ (5) Max 10 nodes total, max 1 level of subgraph nesting \
+ (6) Edge syntax: A --> B or A --> |label| B only \
+ Start the diagram code immediately after this header with no extra text.]
 
 FORMATTING RULES:
 - Use the exact bold header format above: **Header Name:**
@@ -148,10 +158,10 @@ with your own reading of the transcript, follow the directive and explain why yo
 prioritizing it.
 
 STEERED TRACK DIAGRAM NOTE: Omit the **Current State Diagram:** section entirely — \
-the autonomous track already produced it and it does not change with directives. \
-You MUST still produce the **Future State Diagram:** section showing the directive-influenced \
-proposed architecture as a Mermaid graph LR diagram. \
-Keep it concise: max 12 nodes, short single-line labels (NO \\n — use a space instead).
+the autonomous track already produced it. \
+You MUST still produce the **Future State Diagram:** section. \
+Use flowchart LR syntax, alphanumeric node IDs only, plain text labels, max 10 nodes, \
+no parentheses or special chars anywhere in the diagram.
 """
 
 # ---------------------------------------------------------------------------
