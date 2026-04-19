@@ -80,45 +80,49 @@ AWS KNOWLEDGE BASE CONTEXT:
 {kb_context}
 
 {customer_context_section}
-OUTPUT FORMAT — use exactly these headers:
+OUTPUT — always use these EXACT bold headers, in this order. \
+Include or omit sections as instructed by the STAGE RULES above.
 
 **Situation:**
-[1-2 sentences framing who the customer is and why this meeting is happening]
+[1-2 sentences: who the customer is and why this meeting is happening]
 
 **Current State:**
-[Customer's existing environment, tools, technologies, constraints]
+[Customer's existing environment, tools, technologies, constraints. \
+Use bullet points for clarity. Bold sub-topics are fine.]
 
 **Customer Needs:**
 - Explicit: [what they directly stated]
 - Inferred: [what they likely need based on context and patterns]
 
 **Open Questions:**
-[Questions raised in the meeting not yet answered, or gaps in your understanding]
-
---- Stage 2 and 3 only ---
+[Questions raised in the meeting not yet answered, or gaps in understanding]
 
 **Proposed Solution Architecture:**
-[Stage 2: Tentative direction with [ASSUMPTION: ...] labels for anything unconfirmed
- Stage 3: Specific AWS services, how they connect, why this fits the customer]
+[Stage 1: omit this section entirely.
+ Stage 2: Tentative direction with [ASSUMPTION: ...] labels for anything unconfirmed.
+ Stage 3: Specific AWS services, how they connect, data flows, why this fits the customer.]
 
 **Key Recommendations:**
-[Stage 2: 2-3 tentative talking points the SA can explore
- Stage 3: 3-5 prioritized, specific, actionable recommendations grounded in the KB]
+[Stage 1: omit this section entirely.
+ Stage 2: 2-3 tentative talking points the SA can explore now.
+ Stage 3: 3-5 prioritized, specific, actionable recommendations grounded in the KB.]
 
 **Sources:**
-[List source URLs from the knowledge base that grounded your recommendations]
-
---- Stage 3 only ---
+[Stage 1: omit this section entirely.
+ Stage 2+: List source URLs from the knowledge base that grounded your response.]
 
 **Architecture Diagram:**
-[Mermaid diagram, graph LR syntax, showing the proposed architecture]
+[Stage 1 and 2: omit this section entirely.
+ Stage 3: Mermaid diagram using graph LR syntax showing the proposed architecture. \
+ Start the diagram code immediately after this header with no extra text.]
 
-IMPORTANT:
-- Be specific — name actual AWS services, not generic "cloud solution"
-- Ground everything in the knowledge base content provided
-- Label every assumption explicitly: [ASSUMPTION: ...]
-- Re-evaluate conclusions each cycle — drop anything no longer supported by transcript
-- If the customer mentions a competitor, acknowledge it and explain the AWS alternative
+FORMATTING RULES:
+- Use the exact bold header format above: **Header Name:**
+- Do NOT add extra separators, footnotes, or commentary between sections
+- Be specific — name actual AWS services, not generic terms like "cloud solution"
+- Label every unconfirmed assumption: [ASSUMPTION: ...]
+- Ground recommendations in the AWS knowledge base content provided
+- If a competitor is mentioned, acknowledge it and explain the AWS differentiator
 """
 
 # ---------------------------------------------------------------------------

@@ -18,19 +18,29 @@ const CANNED_DIRECTIVES = [
 export function DirectivesBar() {
   const [input, setInput] = useState("");
   const [sent, setSent] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   async function sendDirective(directive: string) {
     const d = directive.trim();
     if (!d) return;
+    setError(null);
     try {
-      await fetch(`${BACKEND}/meeting/directive`, {
+      const res = await fetch(`${BACKEND}/meeting/directive`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ directive: d }),
       });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? `HTTP ${res.status} — start a meeting first`);
+        console.warn("[DirectivesBar] directive rejected:", res.status, body);
+        return;
+      }
       setSent((prev) => [...prev, d]);
-    } catch {
-      // silently ignore — meeting may not be active
+      console.log(`[DirectivesBar] directive sent: ${d}`);
+    } catch (e) {
+      setError("Network error — is the backend running?");
+      console.error("[DirectivesBar] fetch error:", e);
     }
   }
 
@@ -42,6 +52,11 @@ export function DirectivesBar() {
 
   return (
     <div className="border-t border-slate-700 px-3 pt-2 pb-3 space-y-2 shrink-0">
+      {/* Error message */}
+      {error && (
+        <p className="text-xs text-red-400">{error}</p>
+      )}
+
       {/* Active directives */}
       {sent.length > 0 && (
         <div className="flex flex-wrap gap-1">

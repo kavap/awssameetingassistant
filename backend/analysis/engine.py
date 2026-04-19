@@ -296,6 +296,10 @@ class AnalysisEngine:
 
             # Phase 3 — staged analysis (Track A)
             stage = self._determine_stage(ready)
+            logger.info(
+                f"[cycle {self._cycle_count}] stage={stage} segments={self._segment_count} "
+                f"kb_chunks={len(self._accumulated_kb)} directives={len(self._directives)}"
+            )
             result_a = await self._phase3_analysis(
                 stage, ready, reasoning, is_steered=False
             )
@@ -468,7 +472,7 @@ class AnalysisEngine:
                 _executor,
                 partial(_call_sonnet, role_prefix, user_prompt, 1500),
             )
-            logger.debug(f"[phase3 sonnet raw first 500] {raw[:500]!r}")
+            logger.debug(f"[phase3 sonnet raw first 1500] {raw[:1500]!r}")
             result = _build_result(raw, stage, ready, reasoning,
                                    self._cycle_count, is_steered)
             track = "B" if is_steered else "A"
