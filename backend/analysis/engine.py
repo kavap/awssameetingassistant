@@ -155,6 +155,12 @@ def _extract_sources(sections: dict[str, str]) -> list[str]:
     return [u.strip() for u in re.findall(r"https?://\S+", raw)]
 
 
+def _strip_mermaid_fence(text: str) -> str:
+    """Remove ```mermaid ... ``` or ``` ... ``` fences from diagram output."""
+    m = re.match(r"^```(?:mermaid)?\s*\n([\s\S]*?)\n?```\s*$", text.strip(), re.IGNORECASE)
+    return m.group(1).strip() if m else text.strip()
+
+
 _GATHERING = "Gathering context — not enough signal yet."
 
 
@@ -177,7 +183,7 @@ def _build_result(
         proposed = s.get("Proposed Solution Architecture", "")
         recommendations = s.get("Key Recommendations", "")
         # Stage 2: no diagram yet
-        mermaid = s.get("Architecture Diagram", "") if stage == 3 else ""
+        mermaid = _strip_mermaid_fence(s.get("Architecture Diagram", "")) if stage == 3 else ""
 
     return AnalysisResult(
         stage=stage,

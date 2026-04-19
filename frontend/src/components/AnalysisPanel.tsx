@@ -79,8 +79,14 @@ function safeBtoa(str: string): string {
   }
 }
 
+function stripMermaidFence(raw: string): string {
+  // Strip ```mermaid ... ``` or ``` ... ``` fences if present
+  const fenced = raw.trim().match(/^```(?:mermaid)?\s*\n([\s\S]*?)\n?```\s*$/i);
+  return fenced ? fenced[1].trim() : raw.trim();
+}
+
 function MermaidDiagram({ source }: { source: string }) {
-  const text = source?.trim();
+  const text = stripMermaidFence(source ?? "");
   if (!text || !isMermaidCode(text)) return null;
 
   const encoded = safeBtoa(text);
