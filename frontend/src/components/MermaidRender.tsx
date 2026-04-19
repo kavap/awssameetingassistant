@@ -103,8 +103,19 @@ function sanitizeMermaid(raw: string): string {
   return text;
 }
 
-export function safeBtoa(str: string): string {
-  try { return btoa(unescape(encodeURIComponent(str))); } catch { return ""; }
+export function getMermaidLiveUrl(source: string): string {
+  try {
+    // mermaid.live #base64: format: base64(JSON.stringify({ code, mermaid }))
+    const state = JSON.stringify({
+      code: source,
+      mermaid: JSON.stringify({ theme: "dark" }),
+      autoSync: true,
+      updateDiagram: true,
+    });
+    return `https://mermaid.live/edit#base64:${btoa(unescape(encodeURIComponent(state)))}`;
+  } catch {
+    return "";
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -188,7 +199,7 @@ export function DiagramView({ source, tab, hasContent, emptyMessage }: DiagramVi
   const [showSource, setShowSource] = useState(false);
   const extracted = extractMermaidCode(source ?? "");
   const valid = !!(extracted && isMermaidCode(extracted));
-  const encoded = valid ? safeBtoa(extracted) : "";
+  const liveUrl = valid ? getMermaidLiveUrl(extracted) : "";
   const { accent } = DIAGRAM_TAB_CONFIG[tab];
 
   if (!hasContent || !valid) {
@@ -224,9 +235,9 @@ export function DiagramView({ source, tab, hasContent, emptyMessage }: DiagramVi
         >
           {showSource ? "Hide source" : "Source"}
         </button>
-        {encoded && (
+        {liveUrl && (
           <a
-            href={`https://mermaid.live/edit#pako:${encoded}`}
+            href={liveUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
