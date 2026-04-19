@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Mermaid Diagram Debug</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <style>
+    body { background: #0f172a; color: #e2e8f0; font-family: monospace; padding: 20px; }
+    h1 { color: #94a3b8; font-size: 1.1rem; }
+    .card { border: 1px solid #334155; border-radius: 8px; margin: 16px 0; overflow: hidden; }
+    .card-header { background: #1e293b; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; }
+    .card-title { font-size: 0.85rem; font-weight: bold; color: #e2e8f0; }
+    .card-body { background: #0f172a; padding: 12px; }
+    .status { font-size: 0.75rem; padding: 2px 8px; border-radius: 4px; font-weight: bold; }
+    .ok { background: #14532d; color: #4ade80; }
+    .fail { background: #450a0a; color: #f87171; }
+    .error-box { background: #450a0a; border: 1px solid #7f1d1d; border-radius: 4px; padding: 8px; margin-top: 8px; font-size: 0.75rem; color: #fca5a5; word-break: break-all; }
+    .source-box { background: #1e293b; padding: 8px; margin-top: 8px; font-size: 0.7rem; color: #94a3b8; white-space: pre; overflow-x: auto; border-radius: 4px; max-height: 200px; overflow-y: auto; }
+    details summary { cursor: pointer; font-size: 0.75rem; color: #64748b; margin-top: 8px; }
+    svg { max-width: 100%; }
+  </style>
+</head>
+<body>
+  <h1>Mermaid Render Debug &mdash; paste your diagram sources below and re-open</h1>
+  <p style="color:#64748b;font-size:0.75rem;">Each card shows: sanitized source sent to mermaid, and the render result.</p>
+
+  <div id="diagrams"></div>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: "dark",
+      themeVariables: {
+        background: "#0f172a",
+        primaryColor: "#1e3a5f",
+        primaryTextColor: "#e2e8f0",
+        primaryBorderColor: "#334155",
+        lineColor: "#64748b",
+        secondaryColor: "#1e293b",
+        tertiaryColor: "#0f172a",
+      },
+      flowchart: { curve: "basis", htmlLabels: true },
+      securityLevel: "loose",
+    });
+
+    // ── Same logic as DiagramsPanel.tsx ──────────────────────────────────────
+
+    function flattenNestedSubgraphs(text) {
+      const lines = text.split('\n');
+      const out = [];
+      let depth = 0;
+      let skipEnds = 0;
+
+      for (const line of lines) {
+        const t = line.trimStart();
+        if (/^subgraph\b/.test(t)) {
+          if (depth === 0) {
+            out.push(line);
+            depth++;
+          } else {
+            depth++;
+            skipEnds++;
+          }
+        } else if (/^end\s*$/.test(t)) {
+          if (skipEnds > 0) {
+            skipEnds--;
+            depth--;
+          } else {
+            out.push(line);
+            depth = Math.max(0, depth - 1);
+          }
+        } else {
+          out.push(line);
+        }
+      }
+      return out.join('\n');
+    }
+
+    function sanitize(raw) {
+      let text = raw;
+      // 1. graph LR → flowchart LR
+      text = text.replace(/^graph\s+(LR|TD|RL|BT)/m, (_, dir) => `flowchart ${dir}`);
+      // 2. flatten nested subgraphs
+      text = flattenNestedSubgraphs(text);
+      // 3. fix subgraph IDs with spaces
+      text = text.replace(/^(\s*subgraph\s+)([A-Za-z][A-Za-z0-9 _]*)(\s*)$/gm, (_m, prefix, name, trail) => {
+        if (!name.includes('[') && name.includes(' ')) {
+          const id = name.trim().replace(/\s+/g, '_');
+          return `${prefix}${id}["${name.trim()}"]${trail}`;
+        }
+        return _m;
+      });
+      // 4. close unclosed subgraphs
+      const opens = (text.match(/^\s*subgraph\b/gm) || []).length;
+      const closes = (text.match(/^\s*end\s*$/gm) || []).length;
+      if (opens > closes) text = text + '\n' + 'end\n'.repeat(opens - closes);
+      return text;
+    }
+
+    // ── PASTE YOUR ACTUAL DIAGRAM SOURCES HERE ────────────────────────────────
+    // Copy the raw text from the backend debug files:
+    //   cat /tmp/meeting_debug_cycle4_trackA.txt | grep -A1000 "Current State Diagram"
+    // Or just paste what Sonnet generated.
+
+    const DIAGRAMS = [
+      {
+        label: "Current State (customer's existing architecture)",
+        source: `flowchart LR
+  subgraph OnPrem On Premises Data Center
+    subgraph Cloudera Cloudera Cluster 30 Nodes
+      HDFS[HDFS 300 TB Storage]
+      HiveMS[Hive Metastore]
+      MR[MapReduce 30 Jobs]
+      Spark[Spark 2 4 30 Jobs]
+      Presto[Presto Cluster]
+    end
+    TD[Teradata Data Warehouse]
+  end
+  HDFS --> MR
+  HDFS --> Spark
+  HDFS --> Presto
+  HiveMS --> Presto
+  HiveMS --> Spark
+  Users[Business Users] --> Presto
+  Users --> TD`,
+      },
+      {
+        label: "Future State — autonomous track",
+        source: `flowchart LR
+  subgraph Ingest Ingest and Migration
+    DMS[AWS DMS from Teradata]
+  end
+  subgraph Storage Storage Layer
+    S3[Amazon S3 Data Lake]
+    GlueCat[AWS Glue Data Catalog]
+  end
+  subgraph Compute Compute Layer
+    EMR[Amazon EMR Serverless Spark and MapReduce]
+    Athena[Amazon Athena Ad Hoc SQL]
+    Glue[AWS Glue ETL Jobs]
+  end
+  subgraph Warehouse Warehouse Layer
+    RS[Amazon Redshift Serverless]
+  end
+  subgraph Orchestration Orchestration
+    SF[AWS Step Functions]
+  end
+  Users[Business Users and BI Tools] --> Athena
+  Users --> RS
+  DMS --> S3
+  S3 --> EMR
+  S3 --> Athena
+  S3 --> Glue
+  GlueCat --> EMR
+  GlueCat --> Athena
+  GlueCat --> RS
+  Glue --> S3
+  SF --> EMR
+  SF --> Glue
+  RS --> |Redshift Spectrum| S3`,
+      },
+      {
+        label: "Future State — steered track",
+        source: `flowchart LR
+    subgraph Sources
+        TD[Teradata On Prem]
+        CD[Cloudera HDFS]
+    end
+    subgraph Ingest
+        DMS[AWS DMS]
+        Glue[AWS Glue ETL]
+    end
+    subgraph Storage
+        S3T[S3 Tables Iceberg]
+        GlueCat[Glue Data Catalog]
+    end
+    subgraph Compute
+        EMRS[EMR Serverless Spark Trino]
+        RS[Redshift Serverless]
+    end
+    subgraph Governance
+        LF[Lake Formation]
+    end
+    subgraph Analytics
+        SM[SageMaker Data Agent]
+        QS[Amazon QuickSight]
+    end
+    TD --> DMS
+    CD --> Glue
+    DMS --> S3T
+    Glue --> S3T
+    S3T --> GlueCat
+    GlueCat --> LF
+    LF --> EMRS
+    LF --> RS
+    RS --> QS
+    EMRS --> SM
+    SM --> QS`,
+      },
+    ];
+
+    // ── Render loop ───────────────────────────────────────────────────────────
+
+    let counter = 0;
+
+    async function renderAll() {
+      const container = document.getElementById('diagrams');
+
+      for (const { label, source } of DIAGRAMS) {
+        const cleaned = sanitize(source);
+        const id = `d${++counter}`;
+
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+          <div class="card-header">
+            <span class="card-title">${label}</span>
+            <span class="status" id="status-${id}">rendering…</span>
+          </div>
+          <div class="card-body">
+            <div id="render-${id}"></div>
+            <details>
+              <summary>Sanitized source sent to mermaid</summary>
+              <div class="source-box">${cleaned.replace(/</g,'&lt;')}</div>
+            </details>
+          </div>`;
+        container.appendChild(card);
+
+        try {
+          const { svg } = await mermaid.render(id, cleaned);
+          document.getElementById(`render-${id}`).innerHTML = svg;
+          const s = document.getElementById(`status-${id}`);
+          s.textContent = 'OK ✓';
+          s.className = 'status ok';
+        } catch (err) {
+          const s = document.getElementById(`status-${id}`);
+          s.textContent = 'FAILED ✗';
+          s.className = 'status fail';
+          document.getElementById(`render-${id}`).innerHTML =
+            `<div class="error-box">Error: ${String(err).replace(/</g,'&lt;')}</div>`;
+          console.error(`[${label}] mermaid error:`, err, '\nSanitized:\n', cleaned);
+        }
+      }
+    }
+
+    renderAll();
+  </script>
+</body>
+</html>
