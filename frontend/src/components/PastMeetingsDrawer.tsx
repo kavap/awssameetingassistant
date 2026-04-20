@@ -34,9 +34,13 @@ function formatDuration(start: number, end: number): string {
   return `${s}s`;
 }
 
-function formatSpeaker(speaker: string | null): string {
+function formatSpeaker(speaker: string | null, mapping?: Record<string, { name: string }>): string {
   if (!speaker) return "—";
-  const m = speaker.match(/spk_(\d+)/i);
+  if (mapping?.[speaker]?.name) {
+    const parts = mapping[speaker].name.split(/\s+/);
+    return parts.length > 1 ? `${parts[0]} ${parts[1][0]}.` : parts[0];
+  }
+  const m = speaker.match(/spk_(\d+)/i) ?? speaker.match(/(\d+)$/);
   if (m) return `Spk ${parseInt(m[1], 10) + 1}`;
   return speaker;
 }
@@ -99,7 +103,12 @@ function MeetingDetail({ meeting, onBack }: { meeting: SavedMeeting; onBack: () 
           </svg>
         </button>
         <div className="flex-1 min-w-0">
-          <div className="text-xs font-semibold text-slate-200 truncate">{meeting.meeting_type}</div>
+          <div className="text-xs font-semibold text-slate-200 truncate">
+            {meeting.meeting_name || meeting.meeting_type}
+          </div>
+          {meeting.meeting_name && (
+            <div className="text-[10px] text-slate-500">{meeting.meeting_type}</div>
+          )}
           <div className="text-[10px] text-slate-500 flex items-center gap-2">
             <span>{meeting.customer_id !== "anonymous" ? meeting.customer_id : "Anonymous"}</span>
             <span>·</span>
@@ -139,7 +148,7 @@ function MeetingDetail({ meeting, onBack }: { meeting: SavedMeeting; onBack: () 
       {/* Tab content */}
       <div className="flex-1 min-h-0 flex flex-col">
         {activeTab === "transcript" && (
-          <TranscriptView chunks={meeting.transcript} />
+          <TranscriptView chunks={meeting.transcript} speakerMapping={meeting.speaker_mapping ?? {}} />
         )}
 
         {activeTab === "analysis" && (
@@ -229,7 +238,13 @@ function MeetingDetail({ meeting, onBack }: { meeting: SavedMeeting; onBack: () 
 // TranscriptView — read-only transcript for saved meetings
 // ---------------------------------------------------------------------------
 
-function TranscriptView({ chunks }: { chunks: TranscriptChunk[] }) {
+function TranscriptView({
+  chunks,
+  speakerMapping = {},
+}: {
+  chunks: TranscriptChunk[];
+  speakerMapping?: Record<string, { name: string; org: string; role: string }>;
+}) {
   if (!chunks.length) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -245,8 +260,11 @@ function TranscriptView({ chunks }: { chunks: TranscriptChunk[] }) {
           <span className="text-slate-600 shrink-0 w-14 text-right tabular-nums">
             {formatTime(chunk.timestamp)}
           </span>
-          <span className={`shrink-0 w-10 font-medium ${speakerColor(chunk.speaker)}`}>
-            {formatSpeaker(chunk.speaker)}
+          <span
+            className={`shrink-0 w-14 font-medium truncate ${speakerColor(chunk.speaker)}`}
+            title={speakerMapping[chunk.speaker ?? ""]?.name ?? chunk.speaker ?? undefined}
+          >
+            {formatSpeaker(chunk.speaker, speakerMapping)}
           </span>
           <span className="text-slate-300 leading-relaxed">{chunk.text}</span>
         </div>
@@ -289,7 +307,9 @@ function MeetingListItem({
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
-            <span className="text-xs font-medium text-slate-200 truncate">{entry.meeting_type}</span>
+            <span className="text-xs font-medium text-slate-200 truncate">
+              {entry.meeting_name || entry.meeting_type}
+            </span>
             {entry.stage > 0 && (
               <span className={`text-[10px] px-1.5 py-0.5 rounded border ${badge.cls} shrink-0`}>
                 {badge.label}

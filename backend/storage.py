@@ -89,6 +89,7 @@ def _update_index(session_id: str, record: dict) -> None:
         "session_id": session_id,
         "customer_id": record.get("customer_id", "anonymous"),
         "meeting_type": record.get("meeting_type", ""),
+        "meeting_name": record.get("meeting_name", ""),
         "started_at": record.get("started_at", 0),
         "stopped_at": record.get("stopped_at", time.time()),
         "transcript_count": len(record.get("transcript", [])),

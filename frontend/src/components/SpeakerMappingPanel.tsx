@@ -94,12 +94,16 @@ export function SpeakerMappingPanel() {
     });
   }
 
-  /** Roles available for a given org selection */
+  /** Roles available for a given org selection.
+   * Standard roles are filtered by prefix; custom roles (no standard prefix) appear in all categories. */
   function rolesForOrg(org: string): string[] {
     if (!org || org === "Other") return availableRoles;
     const prefix = orgToRolePrefix(org as OrgOption);
     if (!prefix) return availableRoles;
-    return availableRoles.filter((r) => r.startsWith(prefix));
+    const standardPrefixes = ["AWS ", "Customer ", "Partner "];
+    return availableRoles.filter(
+      (r) => r.startsWith(prefix) || !standardPrefixes.some((p) => r.startsWith(p)),
+    );
   }
 
   async function applyMapping() {
