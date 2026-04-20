@@ -4,6 +4,17 @@ import type { ParticipantInfo, SpeakerMappings } from "../types";
 
 const BACKEND = "http://localhost:8000";
 
+const ORG_OPTIONS = ["AWS", "Customer", "AWS Partner", "Other"] as const;
+type OrgOption = typeof ORG_OPTIONS[number];
+
+/** Derive role category prefix from org selection */
+function orgToRolePrefix(org: OrgOption): string {
+  if (org === "AWS") return "AWS";
+  if (org === "Customer") return "Customer";
+  if (org === "AWS Partner") return "Partner";
+  return "";
+}
+
 /** Compute word-count per speaker from transcript chunks */
 function useTalkTime(): Record<string, number> {
   const chunks = useMeetingStore((s) => s.transcriptChunks);
@@ -43,14 +54,13 @@ export function SpeakerMappingPanel() {
   const participants = useMeetingStore((s) => s.participants);
   const speakerMappings = useMeetingStore((s) => s.speakerMappings);
   const setSpeakerMappings = useMeetingStore((s) => s.setSpeakerMappings);
+  const availableRoles = useMeetingStore((s) => s.availableRoles);
   const meetingStatus = useMeetingStore((s) => s.meetingStatus);
 
-  // Local editable state for the mapping table (speaker id -> draft info)
   const [draft, setDraft] = useState<SpeakerMappings>(() => ({ ...speakerMappings }));
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<number | null>(null);
 
-  // All speaker IDs seen in transcript
   const speakerIds = useMemo(() => {
     return Object.keys(talkTime).filter((k) => k !== "__unknown__").sort();
   }, [talkTime]);
@@ -65,6 +75,31 @@ export function SpeakerMappingPanel() {
         [field]: value,
       },
     }));
+  }
+
+  /** When org changes, clear role if it no longer matches the new org's prefix */
+  function setOrgAndMaybeResetRole(speakerId: string, org: string) {
+    setDraft((prev) => {
+      const existing = prev[speakerId] ?? { name: "", org: "", role: "" };
+      const prefix = orgToRolePrefix(org as OrgOption);
+      const roleStillValid = !prefix || existing.role.startsWith(prefix);
+      return {
+        ...prev,
+        [speakerId]: {
+          ...existing,
+          org,
+          role: roleStillValid ? existing.role : "",
+        },
+      };
+    });
+  }
+
+  /** Roles available for a given org selection */
+  function rolesForOrg(org: string): string[] {
+    if (!org || org === "Other") return availableRoles;
+    const prefix = orgToRolePrefix(org as OrgOption);
+    if (!prefix) return availableRoles;
+    return availableRoles.filter((r) => r.startsWith(prefix));
   }
 
   async function applyMapping() {
@@ -131,6 +166,8 @@ export function SpeakerMappingPanel() {
         <div className="space-y-3">
           {speakerIds.map((sid) => {
             const info = draft[sid] ?? { name: "", org: "", role: "" };
+            const filteredRoles = rolesForOrg(info.org);
+
             return (
               <div key={sid} className="bg-slate-900/50 border border-slate-700 rounded-lg p-3">
                 <div className="flex items-center gap-2 mb-2">
@@ -142,21 +179,13 @@ export function SpeakerMappingPanel() {
                 </div>
 
                 <div className="grid grid-cols-3 gap-2">
-                  {/* Name — autofill from participants list */}
+                  {/* Name */}
                   <div>
                     <label className="block text-xs text-slate-500 mb-1">Name</label>
                     {participants.length > 0 ? (
                       <select
                         value={info.name}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setDraftField(sid, "name", val);
-                          // Auto-fill org from participant entry if it has parenthetical
-                          if (val && !info.org) {
-                            const m = val.match(/\(([^)]+)\)/);
-                            if (m) setDraftField(sid, "org", m[1]);
-                          }
-                        }}
+                        onChange={(e) => setDraftField(sid, "name", e.target.value)}
                         className="w-full bg-slate-700 border border-slate-600 text-slate-100 text-xs rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       >
                         <option value="">— select —</option>
@@ -175,28 +204,38 @@ export function SpeakerMappingPanel() {
                     )}
                   </div>
 
-                  {/* Org */}
+                  {/* Org — fixed dropdown */}
                   <div>
                     <label className="block text-xs text-slate-500 mb-1">Organization</label>
-                    <input
-                      type="text"
+                    <select
                       value={info.org}
-                      onChange={(e) => setDraftField(sid, "org", e.target.value)}
-                      placeholder="e.g. AWS, Acme"
-                      className="w-full bg-slate-700 border border-slate-600 text-slate-100 text-xs rounded px-2 py-1.5 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
+                      onChange={(e) => setOrgAndMaybeResetRole(sid, e.target.value)}
+                      className="w-full bg-slate-700 border border-slate-600 text-slate-100 text-xs rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    >
+                      <option value="">— select —</option>
+                      {ORG_OPTIONS.map((o) => (
+                        <option key={o} value={o}>{o}</option>
+                      ))}
+                    </select>
                   </div>
 
-                  {/* Role */}
+                  {/* Role — filtered by org */}
                   <div>
                     <label className="block text-xs text-slate-500 mb-1">Role</label>
-                    <input
-                      type="text"
+                    <select
                       value={info.role}
                       onChange={(e) => setDraftField(sid, "role", e.target.value)}
-                      placeholder="e.g. Account SA"
-                      className="w-full bg-slate-700 border border-slate-600 text-slate-100 text-xs rounded px-2 py-1.5 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
+                      disabled={!info.org}
+                      className="w-full bg-slate-700 border border-slate-600 text-slate-100 text-xs rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-40"
+                    >
+                      <option value="">{info.org ? "— select —" : "Pick org first"}</option>
+                      {filteredRoles.map((r) => (
+                        <option key={r} value={r}>
+                          {/* Strip the org prefix for display brevity */}
+                          {r.replace(/^AWS |^Customer |^Partner /, "")}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
               </div>

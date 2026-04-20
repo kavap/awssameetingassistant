@@ -17,6 +17,7 @@ interface Props {
 
 export function StartMeetingModal({ onConfirm, onCancel }: Props) {
   const connectionStatus = useMeetingStore((s) => s.connectionStatus);
+  const setAvailableRolesInStore = useMeetingStore((s) => s.setAvailableRoles);
   const [customerId, setCustomerId] = useState("");
   const [meetingType, setMeetingType] = useState<MeetingType>("Customer Meeting");
   const [meetingName, setMeetingName] = useState("");
@@ -30,17 +31,20 @@ export function StartMeetingModal({ onConfirm, onCancel }: Props) {
     fetch(`${BACKEND}/meeting/config`)
       .then((r) => r.json())
       .then((data: { default_roles: string[] }) => {
-        setAvailableRoles(data.default_roles ?? []);
+        const roles = data.default_roles ?? [];
+        setAvailableRoles(roles);
+        setAvailableRolesInStore(roles);
       })
       .catch(() => {
-        // Fallback if backend not ready
-        setAvailableRoles([
+        const fallback = [
           "AWS Account SA", "AWS Analytics Specialist SA", "AWS ML Specialist SA",
           "Customer CDO/CTO", "Customer VP Engineering", "Customer Technical Lead",
           "Partner Architect", "Partner Delivery Lead",
-        ]);
+        ];
+        setAvailableRoles(fallback);
+        setAvailableRolesInStore(fallback);
       });
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function toggleRole(role: string) {
     setSelectedRoles((prev) => {
@@ -54,7 +58,9 @@ export function StartMeetingModal({ onConfirm, onCancel }: Props) {
   function addCustomRole() {
     const r = customRole.trim();
     if (!r) return;
-    setAvailableRoles((prev) => [...prev, r]);
+    const updated = [...availableRoles, r];
+    setAvailableRoles(updated);
+    setAvailableRolesInStore(updated);
     setSelectedRoles((prev) => new Set([...prev, r]));
     setCustomRole("");
   }

@@ -310,6 +310,23 @@ class AnalysisEngine:
                 name="speaker-mapping-triggered-cycle",
             )
 
+    def apply_speaker_corrections(self, corrections: list[dict]) -> None:
+        """Update speaker IDs for specific segment indices.
+        Called when the SA re-attributes mis-labeled transcript rows.
+        Does NOT trigger re-analysis — corrections are picked up in the next natural cycle.
+        corrections: [{"index": int, "speaker_id": str}, ...]
+        """
+        for item in corrections:
+            idx = item.get("index")
+            new_speaker = item.get("speaker_id")
+            if idx is None or new_speaker is None:
+                continue
+            if 0 <= idx < len(self._transcript_segments):
+                text, _ = self._transcript_segments[idx]
+                self._transcript_segments[idx] = (text, new_speaker)
+                logger.debug(f"[correction] segment[{idx}] speaker → {new_speaker!r}")
+        logger.info(f"Applied {len(corrections)} speaker correction(s)")
+
     def reset(self) -> None:
         self._transcript_segments = []
         self._accumulated_kb = []

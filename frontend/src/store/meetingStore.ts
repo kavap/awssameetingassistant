@@ -34,6 +34,12 @@ interface MeetingStore {
   selectedRoles: string[];
   speakerMappings: SpeakerMappings;
 
+  // Available roles list (fetched from config + custom) — shared across modal and mapping panel
+  availableRoles: string[];
+
+  // Pending speaker corrections not yet flushed to backend (chunkId → newSpeakerId)
+  pendingCorrections: Record<string, string>;
+
   appendFinalChunk: (text: string, speaker: string | null, ts: number) => void;
   setPartialText: (text: string) => void;
   prependRecommendation: (card: RecommendationCard) => void;
@@ -54,10 +60,13 @@ interface MeetingStore {
   ) => void;
   setSpeakerMappings: (mappings: SpeakerMappings) => void;
   updateSpeakerMapping: (speakerId: string, info: ParticipantInfo) => void;
+  setAvailableRoles: (roles: string[]) => void;
+  correctChunkSpeaker: (chunkId: string, newSpeakerId: string) => void;
+  flushPendingCorrections: () => Record<string, string>;
   reset: () => void;
 }
 
-export const useMeetingStore = create<MeetingStore>((set) => ({
+export const useMeetingStore = create<MeetingStore>((set, get) => ({
   transcriptChunks: [],
   partialText: "",
   recommendations: [],
@@ -74,6 +83,8 @@ export const useMeetingStore = create<MeetingStore>((set) => ({
   participants: [],
   selectedRoles: [],
   speakerMappings: {},
+  availableRoles: [],
+  pendingCorrections: {},
 
   appendFinalChunk: (text, speaker, ts) =>
     set((state) => {
@@ -124,6 +135,22 @@ export const useMeetingStore = create<MeetingStore>((set) => ({
       speakerMappings: { ...state.speakerMappings, [speakerId]: info },
     })),
 
+  setAvailableRoles: (roles) => set({ availableRoles: roles }),
+
+  correctChunkSpeaker: (chunkId, newSpeakerId) =>
+    set((state) => ({
+      transcriptChunks: state.transcriptChunks.map((c) =>
+        c.id === chunkId ? { ...c, speaker: newSpeakerId } : c
+      ),
+      pendingCorrections: { ...state.pendingCorrections, [chunkId]: newSpeakerId },
+    })),
+
+  flushPendingCorrections: () => {
+    const corrections = get().pendingCorrections;
+    set({ pendingCorrections: {} });
+    return corrections;
+  },
+
   reset: () =>
     set({
       transcriptChunks: [],
@@ -141,5 +168,7 @@ export const useMeetingStore = create<MeetingStore>((set) => ({
       participants: [],
       selectedRoles: [],
       speakerMappings: {},
+      availableRoles: [],
+      pendingCorrections: {},
     }),
 }));

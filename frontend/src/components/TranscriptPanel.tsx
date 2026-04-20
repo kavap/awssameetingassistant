@@ -2,12 +2,17 @@ import { useEffect, useRef, useState, useMemo } from "react";
 import { useMeetingStore } from "../store/meetingStore";
 import { TranscriptChunkItem } from "./TranscriptChunkItem";
 
+const BACKEND = "http://localhost:8000";
+
 export function TranscriptPanel() {
   const transcriptChunks = useMeetingStore((s) => s.transcriptChunks);
   const partialText = useMeetingStore((s) => s.partialText);
   const speakerMappings = useMeetingStore((s) => s.speakerMappings);
+  const flushPendingCorrections = useMeetingStore((s) => s.flushPendingCorrections);
+  const meetingStatus = useMeetingStore((s) => s.meetingStatus);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [speakerFilter, setSpeakerFilter] = useState<string>("all");
+  const prevChunkCount = useRef(transcriptChunks.length);
 
   // Collect all distinct speakers for the filter dropdown
   const speakerIds = useMemo(() => {
@@ -17,6 +22,37 @@ export function TranscriptPanel() {
     }
     return [...seen].sort();
   }, [transcriptChunks]);
+
+  // Flush pending speaker corrections to backend when new transcript arrives
+  useEffect(() => {
+    if (
+      meetingStatus !== "recording" ||
+      transcriptChunks.length <= prevChunkCount.current
+    ) {
+      prevChunkCount.current = transcriptChunks.length;
+      return;
+    }
+    prevChunkCount.current = transcriptChunks.length;
+
+    const corrections = flushPendingCorrections();
+    const entries = Object.entries(corrections);
+    if (entries.length === 0) return;
+
+    // Build index-based corrections for backend
+    // Map chunkId → position in transcriptChunks array
+    const indexCorrections = entries.map(([chunkId, speakerId]) => {
+      const idx = transcriptChunks.findIndex((c) => c.id === chunkId);
+      return idx >= 0 ? { index: idx, speaker_id: speakerId } : null;
+    }).filter(Boolean);
+
+    if (indexCorrections.length > 0) {
+      fetch(`${BACKEND}/transcript/speaker-corrections`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ corrections: indexCorrections }),
+      }).catch((e) => console.warn("[TranscriptPanel] Failed to flush corrections:", e));
+    }
+  }, [transcriptChunks.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-scroll to bottom on new content (only when not filtering)
   useEffect(() => {
@@ -94,6 +130,7 @@ export function TranscriptPanel() {
             key={chunk.id}
             chunk={chunk}
             displayName={speakerMappings[chunk.speaker ?? ""]?.name}
+            allSpeakerIds={speakerIds}
           />
         ))}
 
@@ -101,7 +138,7 @@ export function TranscriptPanel() {
         {speakerFilter === "all" && partialText && (
           <div className="flex gap-2 py-1 px-2 text-sm leading-relaxed">
             <span className="text-slate-500 tabular-nums text-xs pt-0.5 shrink-0 w-[4.5rem]" />
-            <span className="text-slate-500 w-10 shrink-0" />
+            <span className="text-slate-500 w-14 shrink-0" />
             <span className="text-slate-500 italic">{partialText}</span>
           </div>
         )}

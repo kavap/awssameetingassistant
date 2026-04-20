@@ -246,6 +246,10 @@ class SpeakerMappingRequest(BaseModel):
     mappings: dict  # {"spk_0": {"name": "...", "org": "...", "role": "..."}, ...}
 
 
+class SpeakerCorrectionRequest(BaseModel):
+    corrections: list[dict]  # [{"index": int, "speaker_id": str}, ...]
+
+
 class SaveMeetingRequest(BaseModel):
     session_id: str
     customer_id: str = "anonymous"
@@ -447,6 +451,18 @@ async def set_speaker_mapping(body: SpeakerMappingRequest):
     })
     logger.info(f"Speaker mapping updated: {list(_speaker_mapping.keys())}")
     return {"status": "ok", "mapped_speakers": list(_speaker_mapping.keys())}
+
+
+@app.post("/transcript/speaker-corrections")
+async def apply_speaker_corrections(body: SpeakerCorrectionRequest):
+    """SA-provided per-segment speaker re-attribution.
+    Updates backend transcript segments without triggering immediate re-analysis.
+    Corrections are picked up in the next natural analysis cycle.
+    """
+    if analysis_engine is None:
+        return JSONResponse(status_code=409, content={"error": "No active meeting session"})
+    analysis_engine.apply_speaker_corrections(body.corrections)
+    return {"status": "ok", "applied": len(body.corrections)}
 
 
 @app.post("/meetings/save")
