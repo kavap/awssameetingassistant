@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { AnalysisResult, CCMState, RecommendationCard, WsMessage } from "../types";
+import type { AnalysisResult, CCMState, RecommendationCard, SpeakerMappings, WsMessage } from "../types";
 import { useMeetingStore } from "../store/meetingStore";
 
 const WS_URL = "ws://localhost:8000/ws";
@@ -22,6 +22,7 @@ export function useWebSocket() {
     setConnectionStatus,
     setMeetingStatus,
     setSessionMeta,
+    setSpeakerMappings,
   } = useMeetingStore();
 
   useEffect(() => {
@@ -97,11 +98,28 @@ export function useWebSocket() {
           }
           case "meeting_started": {
             const ms = msg.payload as {
-              session_id: string; customer_id: string;
+              session_id: string;
+              customer_id: string;
               meeting_type: string;
+              meeting_name: string;
+              participants: string[];
+              selected_roles: string[];
             };
             setMeetingStatus("recording");
-            setSessionMeta(ms.session_id, ms.customer_id, ms.meeting_type, msg.ts);
+            setSessionMeta(
+              ms.session_id,
+              ms.customer_id,
+              ms.meeting_type,
+              ms.meeting_name ?? "",
+              ms.participants ?? [],
+              ms.selected_roles ?? [],
+              msg.ts,
+            );
+            break;
+          }
+          case "speaker_mapping_update": {
+            const p = msg.payload as { mappings: SpeakerMappings };
+            setSpeakerMappings(p.mappings);
             break;
           }
           case "meeting_stopped": {

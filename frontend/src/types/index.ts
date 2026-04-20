@@ -82,6 +82,14 @@ export const MEETING_TYPES = [
 
 export type MeetingType = typeof MEETING_TYPES[number];
 
+export interface ParticipantInfo {
+  name: string;
+  org: string;
+  role: string;
+}
+
+export type SpeakerMappings = Record<string, ParticipantInfo>;
+
 export type WsMessageType =
   | "transcript_partial"
   | "transcript_final"
@@ -91,6 +99,7 @@ export type WsMessageType =
   | "steered_analysis_update"
   | "meeting_started"
   | "meeting_stopped"
+  | "speaker_mapping_update"
   | "error";
 
 export interface WsMessage {
@@ -106,6 +115,7 @@ export interface MeetingIndexEntry {
   session_id: string;
   customer_id: string;
   meeting_type: string;
+  meeting_name: string;
   started_at: number;
   stopped_at: number;
   transcript_count: number;
@@ -117,10 +127,14 @@ export interface SavedMeeting {
   session_id: string;
   customer_id: string;
   meeting_type: string;
+  meeting_name: string;
   started_at: number;
   stopped_at: number;
   transcript: TranscriptChunk[];
   analysis_track_a: AnalysisResult | null;
   analysis_track_b: AnalysisResult | null;
   recommendations: RecommendationCard[];
+  participants: string[];
+  selected_roles: string[];
+  speaker_mapping: SpeakerMappings;
 }

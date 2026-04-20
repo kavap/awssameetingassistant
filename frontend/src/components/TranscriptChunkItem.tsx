@@ -43,8 +43,13 @@ function formatTime(ts: number): string {
 }
 
 /** Map raw Transcribe speaker IDs ("spk_0", "spk_1") to readable labels. */
-function formatSpeaker(speaker: string | null): string {
+function formatSpeaker(speaker: string | null, displayName?: string): string {
   if (!speaker) return "—";
+  if (displayName) {
+    // Abbreviate to first name or initials if too long
+    const parts = displayName.split(/\s+/);
+    return parts.length > 1 ? `${parts[0]} ${parts[1][0]}.` : parts[0];
+  }
   // Transcribe format: "spk_0", "spk_1", etc.
   const m = speaker.match(/(\d+)$/);
   if (m) return `Spk ${parseInt(m[1]) + 1}`;
@@ -68,16 +73,20 @@ function speakerColor(speaker: string | null): string {
 
 interface Props {
   chunk: TranscriptChunk;
+  displayName?: string;
 }
 
-export function TranscriptChunkItem({ chunk }: Props) {
+export function TranscriptChunkItem({ chunk, displayName }: Props) {
   return (
     <div className="flex gap-2 py-1 px-2 hover:bg-slate-800/40 rounded text-sm leading-relaxed">
       <span className="text-slate-500 tabular-nums text-xs pt-0.5 shrink-0 w-[4.5rem]">
         {formatTime(chunk.timestamp)}
       </span>
-      <span className={`text-xs pt-0.5 shrink-0 w-10 font-medium ${speakerColor(chunk.speaker)}`}>
-        {formatSpeaker(chunk.speaker)}
+      <span
+        className={`text-xs pt-0.5 shrink-0 w-14 font-medium truncate ${speakerColor(chunk.speaker)}`}
+        title={displayName ?? chunk.speaker ?? undefined}
+      >
+        {formatSpeaker(chunk.speaker, displayName)}
       </span>
       <span className="text-slate-200 min-w-0">{highlightText(chunk.text)}</span>
     </div>

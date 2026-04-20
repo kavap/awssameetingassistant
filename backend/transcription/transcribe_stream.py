@@ -82,7 +82,7 @@ async def _receive_transcripts(stream, ccm_engine: CCMEngine, ws_manager, on_ccm
                     if not is_partial:
                         # Feed AnalysisEngine cadence (every final segment)
                         if on_final_transcript:
-                            await on_final_transcript(text)
+                            await on_final_transcript(text, speaker)
 
                         ccm_event = await ccm_engine.process_transcript_segment(text, is_final=True)
                         if ccm_event:

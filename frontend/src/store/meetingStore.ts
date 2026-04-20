@@ -4,7 +4,9 @@ import type {
   CCMState,
   ConnectionStatus,
   MeetingStatus,
+  ParticipantInfo,
   RecommendationCard,
+  SpeakerMappings,
   TranscriptChunk,
 } from "../types";
 
@@ -24,7 +26,13 @@ interface MeetingStore {
   sessionId: string | null;
   customerId: string;
   meetingType: string;
+  meetingName: string;
   meetingStartedAt: number | null;
+
+  // Participant + speaker mapping
+  participants: string[];
+  selectedRoles: string[];
+  speakerMappings: SpeakerMappings;
 
   appendFinalChunk: (text: string, speaker: string | null, ts: number) => void;
   setPartialText: (text: string) => void;
@@ -35,7 +43,17 @@ interface MeetingStore {
   setAnalysisTrackB: (result: AnalysisResult) => void;
   setConnectionStatus: (status: ConnectionStatus) => void;
   setMeetingStatus: (status: MeetingStatus) => void;
-  setSessionMeta: (sessionId: string, customerId: string, meetingType: string, startedAt: number) => void;
+  setSessionMeta: (
+    sessionId: string,
+    customerId: string,
+    meetingType: string,
+    meetingName: string,
+    participants: string[],
+    selectedRoles: string[],
+    startedAt: number,
+  ) => void;
+  setSpeakerMappings: (mappings: SpeakerMappings) => void;
+  updateSpeakerMapping: (speakerId: string, info: ParticipantInfo) => void;
   reset: () => void;
 }
 
@@ -51,7 +69,11 @@ export const useMeetingStore = create<MeetingStore>((set) => ({
   sessionId: null,
   customerId: "anonymous",
   meetingType: "Customer Meeting",
+  meetingName: "",
   meetingStartedAt: null,
+  participants: [],
+  selectedRoles: [],
+  speakerMappings: {},
 
   appendFinalChunk: (text, speaker, ts) =>
     set((state) => {
@@ -92,8 +114,15 @@ export const useMeetingStore = create<MeetingStore>((set) => ({
 
   setMeetingStatus: (meetingStatus) => set({ meetingStatus }),
 
-  setSessionMeta: (sessionId, customerId, meetingType, startedAt) =>
-    set({ sessionId, customerId, meetingType, meetingStartedAt: startedAt }),
+  setSessionMeta: (sessionId, customerId, meetingType, meetingName, participants, selectedRoles, startedAt) =>
+    set({ sessionId, customerId, meetingType, meetingName, participants, selectedRoles, meetingStartedAt: startedAt }),
+
+  setSpeakerMappings: (mappings) => set({ speakerMappings: mappings }),
+
+  updateSpeakerMapping: (speakerId, info) =>
+    set((state) => ({
+      speakerMappings: { ...state.speakerMappings, [speakerId]: info },
+    })),
 
   reset: () =>
     set({
@@ -107,6 +136,10 @@ export const useMeetingStore = create<MeetingStore>((set) => ({
       sessionId: null,
       customerId: "anonymous",
       meetingType: "Customer Meeting",
+      meetingName: "",
       meetingStartedAt: null,
+      participants: [],
+      selectedRoles: [],
+      speakerMappings: {},
     }),
 }));

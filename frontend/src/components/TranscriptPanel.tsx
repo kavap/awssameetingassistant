@@ -1,16 +1,40 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { useMeetingStore } from "../store/meetingStore";
 import { TranscriptChunkItem } from "./TranscriptChunkItem";
 
 export function TranscriptPanel() {
   const transcriptChunks = useMeetingStore((s) => s.transcriptChunks);
   const partialText = useMeetingStore((s) => s.partialText);
+  const speakerMappings = useMeetingStore((s) => s.speakerMappings);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [speakerFilter, setSpeakerFilter] = useState<string>("all");
 
-  // Auto-scroll to bottom on new content
+  // Collect all distinct speakers for the filter dropdown
+  const speakerIds = useMemo(() => {
+    const seen = new Set<string>();
+    for (const chunk of transcriptChunks) {
+      if (chunk.speaker) seen.add(chunk.speaker);
+    }
+    return [...seen].sort();
+  }, [transcriptChunks]);
+
+  // Auto-scroll to bottom on new content (only when not filtering)
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [transcriptChunks.length, partialText]);
+    if (speakerFilter === "all") {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [transcriptChunks.length, partialText, speakerFilter]);
+
+  const filtered = speakerFilter === "all"
+    ? transcriptChunks
+    : transcriptChunks.filter((c) => c.speaker === speakerFilter);
+
+  function speakerDisplayName(id: string): string {
+    const info = speakerMappings[id];
+    if (info?.name) return info.name;
+    const m = id.match(/(\d+)$/);
+    return `Speaker ${m ? parseInt(m[1]) + 1 : id}`;
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -22,29 +46,59 @@ export function TranscriptPanel() {
         <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
           Live Transcript
         </span>
+
+        {/* Speaker filter */}
+        {speakerIds.length > 1 && (
+          <select
+            value={speakerFilter}
+            onChange={(e) => setSpeakerFilter(e.target.value)}
+            className="ml-2 bg-slate-800 border border-slate-600 text-slate-300 text-xs rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          >
+            <option value="all">All speakers</option>
+            {speakerIds.map((id) => (
+              <option key={id} value={id}>{speakerDisplayName(id)}</option>
+            ))}
+          </select>
+        )}
+
         <span className="ml-auto text-xs text-slate-600">
-          {transcriptChunks.length} segments
+          {filtered.length}{speakerFilter !== "all" ? `/${transcriptChunks.length}` : ""} segments
         </span>
       </div>
 
       <div className="flex-1 overflow-y-auto py-2">
-        {transcriptChunks.length === 0 && !partialText && (
+        {filtered.length === 0 && !partialText && (
           <div className="flex flex-col items-center justify-center h-full text-slate-600 text-sm gap-2">
-            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-            </svg>
-            <span>Waiting for audio...</span>
+            {speakerFilter !== "all" ? (
+              <>
+                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>No segments for this speaker yet.</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                    d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                </svg>
+                <span>Waiting for audio...</span>
+              </>
+            )}
           </div>
         )}
 
-        {/* Full transcript — all chunks, scroll to bottom */}
-        {transcriptChunks.map((chunk) => (
-          <TranscriptChunkItem key={chunk.id} chunk={chunk} />
+        {filtered.map((chunk) => (
+          <TranscriptChunkItem
+            key={chunk.id}
+            chunk={chunk}
+            displayName={speakerMappings[chunk.speaker ?? ""]?.name}
+          />
         ))}
 
-        {/* Partial / in-progress text */}
-        {partialText && (
+        {/* Partial text — show only when not filtering */}
+        {speakerFilter === "all" && partialText && (
           <div className="flex gap-2 py-1 px-2 text-sm leading-relaxed">
             <span className="text-slate-500 tabular-nums text-xs pt-0.5 shrink-0 w-[4.5rem]" />
             <span className="text-slate-500 w-10 shrink-0" />

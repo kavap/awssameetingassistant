@@ -80,6 +80,7 @@ AWS KNOWLEDGE BASE CONTEXT:
 {kb_context}
 
 {customer_context_section}
+{participants_context}
 OUTPUT — always use these EXACT bold headers, in this order. \
 Include or omit sections as instructed by the STAGE RULES above.
 

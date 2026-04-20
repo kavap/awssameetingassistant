@@ -247,7 +247,7 @@ class AnalysisEngine:
         self._customer_context = customer_context
 
         # Session-level state
-        self._transcript_segments: list[str] = []
+        self._transcript_segments: list[tuple[str, str | None]] = []  # (text, speaker_id)
         self._accumulated_kb: list[dict] = []
         self._seen_uris: set[str] = set()
         self._prior_queries: list[str] = []
@@ -257,6 +257,8 @@ class AnalysisEngine:
         self._cycle_count: int = 0
         self._segment_count: int = 0
         self._analyzing: bool = False
+        # Speaker mapping: {"spk_0": {"name": "...", "org": "...", "role": "..."}}
+        self._speaker_mapping: dict[str, dict] = {}
 
     # ------------------------------------------------------------------
     # Public API
@@ -275,15 +277,15 @@ class AnalysisEngine:
                     name="directive-triggered-cycle",
                 )
 
-    async def on_final_segment(self, text: str, ccm_state: dict) -> None:
+    async def on_final_segment(self, text: str, ccm_state: dict, speaker: str | None = None) -> None:
         """Called by the pipeline for every final transcript segment."""
         if text.strip():
-            self._transcript_segments.append(text)
+            self._transcript_segments.append((text, speaker))
             if len(self._transcript_segments) > MAX_TRANSCRIPT_SEGMENTS:
                 self._transcript_segments = self._transcript_segments[-MAX_TRANSCRIPT_SEGMENTS:]
             self._segment_count += 1
             logger.debug(
-                f"[segment #{self._segment_count}] text={text[:60]!r} "
+                f"[segment #{self._segment_count}] text={text[:60]!r} speaker={speaker} "
                 f"analyzing={self._analyzing} "
                 f"(next cycle at #{ANALYZE_EVERY * (self._segment_count // ANALYZE_EVERY + 1)})"
             )
@@ -294,6 +296,20 @@ class AnalysisEngine:
             )
             asyncio.create_task(self._analyze_cycle(ccm_state))
 
+    def update_speaker_mapping(self, mapping: dict[str, dict]) -> None:
+        """Called when SA provides/updates speaker-to-participant mapping.
+        Triggers an immediate re-analysis cycle with enriched context.
+        mapping: {"spk_0": {"name": "...", "org": "...", "role": "..."}, ...}
+        """
+        self._speaker_mapping = mapping
+        logger.info(f"Speaker mapping updated: {list(mapping.keys())}")
+        if not self._analyzing and self._segment_count > 0:
+            logger.info("[speaker-mapping] triggering immediate re-analysis cycle")
+            asyncio.create_task(
+                self._analyze_cycle({}),
+                name="speaker-mapping-triggered-cycle",
+            )
+
     def reset(self) -> None:
         self._transcript_segments = []
         self._accumulated_kb = []
@@ -302,6 +318,7 @@ class AnalysisEngine:
         self._previous_analysis_a = ""
         self._previous_analysis_b = ""
         self._directives = []
+        self._speaker_mapping = {}
         self._cycle_count = 0
         self._segment_count = 0
         self._analyzing = False
@@ -376,10 +393,55 @@ class AnalysisEngine:
     # Phase 1 — readiness + query gen (Haiku)
     # ------------------------------------------------------------------
 
+    def _build_transcript_text(self, last_n: int = 50) -> str:
+        """Build transcript string, annotating with speaker identity when mapping exists."""
+        segments = self._transcript_segments[-last_n:]
+        if not self._speaker_mapping:
+            return "\n".join(text for text, _ in segments)
+        lines = []
+        for text, speaker_id in segments:
+            if speaker_id and speaker_id in self._speaker_mapping:
+                info = self._speaker_mapping[speaker_id]
+                label = f"[{info.get('name', speaker_id)} | {info.get('org', '?')} | {info.get('role', '?')}]"
+            elif speaker_id:
+                try:
+                    idx = int(speaker_id.split("_")[-1]) + 1
+                except (ValueError, IndexError):
+                    idx = 1
+                label = f"[Speaker {idx} — unmapped]"
+            else:
+                label = "[Unknown speaker]"
+            lines.append(f"{label}: {text}")
+        return "\n".join(lines)
+
+    def _build_participants_context(self) -> str:
+        """Build the participants context block for Sonnet when speaker mapping exists."""
+        if not self._speaker_mapping:
+            return ""
+        by_org: dict[str, list[str]] = {}
+        for info in self._speaker_mapping.values():
+            org = info.get("org", "Other")
+            name = info.get("name", "Unknown")
+            role = info.get("role", "")
+            entry = f"{name} ({role})" if role else name
+            by_org.setdefault(org, []).append(entry)
+
+        lines = ["MEETING PARTICIPANTS (confirmed by SA — use these identities when analyzing who said what):"]
+        for org in ["AWS", "Customer", "Partner", "Other"]:
+            if org in by_org:
+                lines.append(f"  {org}: {', '.join(by_org[org])}")
+        lines.append("")
+        lines.append("SPEAKER-AWARE ANALYSIS GUIDELINES:")
+        lines.append("- 'Situation' and 'Current State': derive primarily from CUSTOMER participant statements")
+        lines.append("- 'Customer Needs' and 'Open Questions': focus on questions and pain points from CUSTOMER participants")
+        lines.append("- If AWS participants made follow-up commitments, note them in 'Open Questions' as [ACTION: ...]")
+        lines.append("- The transcript below is annotated with [Name | Org | Role]: prefixes")
+        return "\n".join(lines) + "\n"
+
     async def _phase1_query_gen(
         self, ccm_state: dict
     ) -> tuple[bool, str, list[str]]:
-        transcript_text = "\n".join(self._transcript_segments[-30:])
+        transcript_text = self._build_transcript_text(30)
 
         known_services = list(ccm_state.get("mentioned_services", {}).keys())
         known_topics = [t["name"] for t in ccm_state.get("active_topics", [])]
@@ -464,7 +526,7 @@ class AnalysisEngine:
         }
         stage_label = stage_labels[stage]
 
-        transcript_text = "\n".join(self._transcript_segments[-50:])
+        transcript_text = self._build_transcript_text(50)
 
         kb_lines = []
         for r in self._accumulated_kb[:12]:
@@ -486,6 +548,8 @@ class AnalysisEngine:
             previous = previous[:2500] + "\n[... truncated for brevity ...]"
         previous_section = previous if previous else "No prior analysis — this is the first cycle."
 
+        participants_ctx = self._build_participants_context()
+
         user_prompt = ANALYSIS_PROMPT.format(
             stage_label=stage_label,
             previous_analysis=previous_section,
@@ -493,6 +557,7 @@ class AnalysisEngine:
             transcript=transcript_text[:4000],
             kb_context=kb_context,
             customer_context_section=customer_ctx,
+            participants_context=participants_ctx,
         )
 
         if is_steered and self._directives:

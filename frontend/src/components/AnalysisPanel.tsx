@@ -3,8 +3,9 @@ import { useMeetingStore } from "../store/meetingStore";
 import { DirectivesBar } from "./DirectivesBar";
 import { DiagramsPanel } from "./DiagramsPanel";
 import { AnalysisView } from "./AnalysisView";
+import { SpeakerMappingPanel } from "./SpeakerMappingPanel";
 
-type AnalysisTab = "auto" | "steered" | "diagrams";
+type AnalysisTab = "auto" | "steered" | "diagrams" | "speakers";
 
 export function AnalysisPanel() {
   const analysisTrackA = useMeetingStore((s) => s.analysisTrackA);
@@ -20,11 +21,17 @@ export function AnalysisPanel() {
     );
   }, [analysisTrackA]);
 
+  const speakerMappings = useMeetingStore((s) => s.speakerMappings);
+  const transcriptChunks = useMeetingStore((s) => s.transcriptChunks);
+
   const hasDiagrams = !!(
     analysisTrackA?.current_state_diagram ||
     analysisTrackA?.mermaid_diagram ||
     analysisTrackB?.mermaid_diagram
   );
+
+  const hasSpeakers = transcriptChunks.some((c) => c.speaker !== null);
+  const hasMapping = Object.keys(speakerMappings).length > 0;
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -88,12 +95,33 @@ export function AnalysisPanel() {
           Diagrams
           {hasDiagrams && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
         </button>
+
+        {/* Speakers tab */}
+        <button
+          onClick={() => setActiveTab("speakers")}
+          className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${
+            activeTab === "speakers"
+              ? "border-cyan-500 text-slate-100"
+              : "border-transparent text-slate-500 hover:text-slate-300"
+          }`}
+        >
+          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          Speakers
+          {(hasSpeakers || hasMapping) && <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />}
+        </button>
       </div>
 
       {/* Tab content */}
       {activeTab === "diagrams" ? (
         <div className="flex-1 min-h-0">
           <DiagramsPanel />
+        </div>
+      ) : activeTab === "speakers" ? (
+        <div className="flex-1 min-h-0">
+          <SpeakerMappingPanel />
         </div>
       ) : (
         <div className="flex flex-col flex-1 min-h-0">

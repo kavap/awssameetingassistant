@@ -51,6 +51,10 @@ _stop_event: asyncio.Event = asyncio.Event()
 _session_id: str | None = None
 _customer_id: str = "anonymous"
 _meeting_type: str = "Customer Meeting"
+_meeting_name: str = ""
+_participants: list[str] = []
+_selected_roles: list[str] = []
+_speaker_mapping: dict[str, dict] = {}
 _customer_context: str = ""
 
 # Per-topic cooldown for AgentCore fast-card path
@@ -149,11 +153,11 @@ async def handle_ccm_event(ccm_event) -> None:
                 pass
 
 
-async def handle_final_transcript(text: str) -> None:
+async def handle_final_transcript(text: str, speaker: str | None = None) -> None:
     """Called for every final transcript segment — feeds the AnalysisEngine cadence."""
-    logger.debug(f"[handle_final_transcript] engine={analysis_engine is not None} text={text[:60]!r}")
+    logger.debug(f"[handle_final_transcript] engine={analysis_engine is not None} text={text[:60]!r} speaker={speaker}")
     if analysis_engine is not None:
-        await analysis_engine.on_final_segment(text, ccm_engine.get_state_snapshot())
+        await analysis_engine.on_final_segment(text, ccm_engine.get_state_snapshot(), speaker=speaker)
     else:
         logger.warning("[handle_final_transcript] analysis_engine is None — segment dropped")
 
@@ -229,16 +233,27 @@ app.add_middleware(
 class StartMeetingRequest(BaseModel):
     customer_id: str = "anonymous"
     meeting_type: str = "Customer Meeting"
+    meeting_name: str = ""
+    participants: list[str] = []
+    selected_roles: list[str] = []
 
 
 class DirectiveRequest(BaseModel):
     directive: str
 
 
+class SpeakerMappingRequest(BaseModel):
+    mappings: dict  # {"spk_0": {"name": "...", "org": "...", "role": "..."}, ...}
+
+
 class SaveMeetingRequest(BaseModel):
     session_id: str
     customer_id: str = "anonymous"
     meeting_type: str = "Customer Meeting"
+    meeting_name: str = ""
+    participants: list[str] = []
+    selected_roles: list[str] = []
+    speaker_mapping: dict = {}
     started_at: float = 0.0
     stopped_at: float = 0.0
     transcript: list[dict] = []
@@ -277,9 +292,17 @@ async def get_meeting_state():
     return ccm_engine.get_state_snapshot()
 
 
+@app.get("/meeting/config")
+async def get_meeting_config():
+    """Return frontend configuration: default roles list."""
+    roles = [r.strip() for r in settings.default_meeting_roles.split(",") if r.strip()]
+    return {"default_roles": roles}
+
+
 @app.post("/meeting/start")
 async def start_meeting(body: StartMeetingRequest = StartMeetingRequest()):
     global _meeting_task, _stop_event, _session_id, _customer_id, _meeting_type
+    global _meeting_name, _participants, _selected_roles, _speaker_mapping
     global _customer_context, _last_trigger, analysis_engine
 
     if _meeting_task and not _meeting_task.done():
@@ -293,6 +316,10 @@ async def start_meeting(body: StartMeetingRequest = StartMeetingRequest()):
     _session_id = str(uuid.uuid4())
     _customer_id = (body.customer_id or "anonymous").strip().lower()
     _meeting_type = body.meeting_type if body.meeting_type in MEETING_TYPES else "Customer Meeting"
+    _meeting_name = body.meeting_name.strip()
+    _participants = [p.strip() for p in body.participants if p.strip()]
+    _selected_roles = [r.strip() for r in body.selected_roles if r.strip()]
+    _speaker_mapping = {}
     _last_trigger = {}
 
     # Load prior customer context from AgentCore Memory
@@ -333,6 +360,9 @@ async def start_meeting(body: StartMeetingRequest = StartMeetingRequest()):
             "session_id": _session_id,
             "customer_id": _customer_id,
             "meeting_type": _meeting_type,
+            "meeting_name": _meeting_name,
+            "participants": _participants,
+            "selected_roles": _selected_roles,
             "stt_provider": settings.stt_provider,
             "customer_context_loaded": bool(_customer_context),
         },
@@ -398,6 +428,25 @@ async def add_directive(body: DirectiveRequest):
     analysis_engine.add_directive(body.directive.strip(), ccm_engine.get_state_snapshot())
     logger.info(f"SA directive injected: {body.directive!r}")
     return {"status": "ok", "directive": body.directive.strip()}
+
+
+@app.post("/meeting/speaker-mapping")
+async def set_speaker_mapping(body: SpeakerMappingRequest):
+    """SA-provided speaker→participant mapping. Triggers immediate re-analysis."""
+    global _speaker_mapping
+    if analysis_engine is None:
+        return JSONResponse(status_code=409, content={"error": "No active meeting session"})
+
+    _speaker_mapping = body.mappings
+    analysis_engine.update_speaker_mapping(_speaker_mapping)
+
+    await ws_manager.broadcast({
+        "type": "speaker_mapping_update",
+        "ts": time.time(),
+        "payload": {"mappings": _speaker_mapping},
+    })
+    logger.info(f"Speaker mapping updated: {list(_speaker_mapping.keys())}")
+    return {"status": "ok", "mapped_speakers": list(_speaker_mapping.keys())}
 
 
 @app.post("/meetings/save")

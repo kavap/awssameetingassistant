@@ -6,7 +6,7 @@ import { TranscriptPanel } from "./components/TranscriptPanel";
 import { AnalysisPanel } from "./components/AnalysisPanel";
 import { StartMeetingModal } from "./components/StartMeetingModal";
 import { PastMeetingsDrawer } from "./components/PastMeetingsDrawer";
-import type { MeetingType } from "./types";
+import type { MeetingType, SpeakerMappings } from "./types";
 import "./index.css";
 
 class PanelErrorBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
@@ -58,12 +58,24 @@ export default function App() {
   const [showModal, setShowModal] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
 
-  async function startMeeting(customerId: string, meetingType: MeetingType) {
+  async function startMeeting(
+    customerId: string,
+    meetingType: MeetingType,
+    meetingName: string,
+    participants: string[],
+    selectedRoles: string[],
+  ) {
     setShowModal(false);
     await fetch(`${BACKEND}/meeting/start`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ customer_id: customerId, meeting_type: meetingType }),
+      body: JSON.stringify({
+        customer_id: customerId,
+        meeting_type: meetingType,
+        meeting_name: meetingName,
+        participants,
+        selected_roles: selectedRoles,
+      }),
     });
   }
 
@@ -74,12 +86,16 @@ export default function App() {
       session_id: state.sessionId,
       customer_id: state.customerId,
       meeting_type: state.meetingType,
+      meeting_name: state.meetingName,
       started_at: state.meetingStartedAt ?? Date.now() / 1000,
       stopped_at: Date.now() / 1000,
       transcript: state.transcriptChunks,
       analysis_track_a: state.analysisTrackA,
       analysis_track_b: state.analysisTrackB,
       recommendations: state.recommendations,
+      participants: state.participants,
+      selected_roles: state.selectedRoles,
+      speaker_mapping: state.speakerMappings as SpeakerMappings,
     };
 
     await fetch(`${BACKEND}/meeting/stop`, { method: "POST" });
@@ -194,7 +210,9 @@ export default function App() {
       {/* Start Meeting Modal */}
       {showModal && (
         <StartMeetingModal
-          onConfirm={startMeeting}
+          onConfirm={(customerId, meetingType, meetingName, participants, selectedRoles) =>
+            startMeeting(customerId, meetingType, meetingName, participants, selectedRoles)
+          }
           onCancel={() => setShowModal(false)}
         />
       )}

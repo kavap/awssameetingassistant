@@ -56,6 +56,37 @@ class Settings(BaseSettings):
     agentcore_memory_id: str = ""           # set after: scripts/setup_agentcore.py
     agentcore_memory_strategy_id: str = ""  # set after: scripts/setup_agentcore.py
 
+    # Speaker diarization / participant mapping
+    # Comma-separated list of roles shown as checkboxes in the Start Meeting modal.
+    default_meeting_roles: str = (
+        "AWS Account SA,"
+        "AWS Analytics Specialist SA,"
+        "AWS ML Specialist SA,"
+        "AWS Storage Specialist SA,"
+        "AWS Database Specialist SA,"
+        "AWS Security Specialist SA,"
+        "AWS Account Manager,"
+        "AWS TAM,"
+        "AWS CSM,"
+        "AWS Domain Sales Specialist,"
+        "AWS Proserve Architect,"
+        "AWS Proserve Engagement Manager,"
+        "AWS Service PM,"
+        "AWS Service Engineer/Architect,"
+        "AWS Data and AI Strategist,"
+        "AWS SA Manager / Leader,"
+        "Customer CDO/CTO,"
+        "Customer VP Engineering,"
+        "Customer Director,"
+        "Customer Data Engineer,"
+        "Customer Data Scientist,"
+        "Customer Technical Lead,"
+        "Customer Project Manager,"
+        "Partner Architect,"
+        "Partner Delivery Lead,"
+        "Partner Practice Lead"
+    )
+
     # Development / testing
     use_fake_audio: bool = False
     fake_audio_path: str = "data/test_audio.wav"
