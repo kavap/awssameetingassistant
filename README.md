@@ -9,12 +9,15 @@ A real-time AI assistant for AWS Solutions Architects. Listens to live customer 
 | Feature | Description |
 |---|---|
 | **Live Transcript** | Real-time speech-to-text with speaker labels, full session history |
+| **Speaker Diarization + Mapping** | Per-speaker talk-time bars, map speaker IDs to names/org/role mid-meeting |
+| **Speaker Re-attribution** | Click any transcript line's speaker label to correct mis-attributed segments inline |
+| **Role-Aware Analysis** | Speaker roles injected into Sonnet prompt with domain expertise context |
 | **Conversation Context Map (CCM)** | Per-segment extraction of AWS services, topics, open questions |
 | **Two-Track Analysis** | Track A (auto) + Track B (SA-steered via directives); 3-stage progression |
 | **Architecture Diagrams** | Mermaid diagrams: current state, future state auto, future state steered |
 | **Recommendation Cards** | Instant cards with AWS docs links, action items, code references |
-| **SA Directives** | Type a directive mid-meeting to steer Track B toward a specific focus |
-| **Past Meetings** | All meetings auto-saved as JSON; browse, replay, and compare |
+| **SA Directives** | Pre-canned or custom directives to steer Track B mid-meeting; configurable via `.env` |
+| **Past Meetings** | All meetings auto-saved as JSON; browse, replay, and compare (with speaker names) |
 | **Meeting Types** | 8 types (Customer Meeting, OneTeam, SA Manager Sync, etc.) |
 | **AgentCore** | Optional: deploy recommendation agent to Bedrock AgentCore Runtime + cross-session Memory |
 
@@ -26,18 +29,19 @@ A real-time AI assistant for AWS Solutions Architects. Listens to live customer 
 Microphone / System Audio  (BlackHole for capturing both sides of a Zoom/Teams call)
          │
          ▼
-STT Engine ─┬─ Amazon Transcribe Streaming  (cloud, best accuracy, speaker labels)
+STT Engine ─┬─ Amazon Transcribe Streaming  (cloud, best accuracy, speaker labels + diarization)
              └─ faster-whisper large-v3-turbo (local, offline, Apple Silicon GPU)
          │
-         ▼  (every final segment)
+         ▼  (every final segment, with speaker ID)
 Conversation Context Map Engine  — extracts services, topics, questions  (<10ms)
          │
          ├──▶  CCM state → WebSocket → frontend (live)
          │
          ▼  (every 3 segments)
 Analysis Engine ──────────────────────────────────────────────────────────
+  Speaker Mapping  — name/org/role per speaker ID, injected into prompts
   Phase 1 (Haiku):  readiness check + KB search query generation
-  Phase 2 (Sonnet): staged analysis with accumulated KB context
+  Phase 2 (Sonnet): staged analysis with accumulated KB context + participant context
     ├─ Track A  (auto)    → analysis_update  WebSocket
     └─ Track B  (steered) → steered_analysis_update  WebSocket
          │
@@ -50,11 +54,11 @@ Recommendation Agent ─┬─ Local (Haiku → Sonnet)  when AgentCore not conf
          │
          ▼
 WebSocket → React/TypeScript Frontend
-  ├─ Transcript panel (55%)    — full history, speaker labels
-  └─ Live Analysis panel (45%) — Auto | Steered | Diagrams tabs
+  ├─ Transcript panel (55%)    — full history, mapped speaker names, inline re-attribution
+  └─ Live Analysis panel (45%) — Auto | Steered | Diagrams | Speakers tabs
          │
          ▼
-Meeting Storage  — auto-saved JSON on stop, browsable in Past Meetings drawer
+Meeting Storage  — auto-saved JSON on stop (includes speaker mapping), browsable in Past Meetings drawer
 ```
 
 ---
@@ -352,24 +356,45 @@ If you also use AgentCore:
 ## Using the Assistant
 
 1. Open **http://localhost:5173**
-2. Click **Start Meeting** → choose meeting type and customer ID
+2. Click **Start Meeting** → fill in the modal:
+   - **Meeting Name** (optional, shown in history)
+   - **Meeting Type** (Customer Meeting, OneTeam, etc.)
+   - **Customer ID** (optional, used to load prior context from AgentCore Memory)
+   - **Participants** — paste names/emails one per line; used to map speaker IDs during the call
+   - **Roles Present** — select all roles attending (AWS / Customer / Partner); used to enrich analysis prompts
 3. Watch the transcript stream in real-time (left panel)
+   - Speaker labels show mapped names (e.g. "John S.") once mapped in the Speakers tab
+   - Click any speaker label to correct mis-attributed segments inline
 4. **Live Analysis** panel (right):
    - **Auto tab** — autonomous 3-stage analysis (situation → architecture → recommendations)
    - **Steered tab** — SA-directed analysis (type a directive in the bar below)
    - **Diagrams tab** — Mermaid architecture diagrams (current state + future state)
+   - **Speakers tab** — talk-time bars + map each diarized speaker ID to a name, org, and role
 5. Use the **directive bar** to steer Track B mid-meeting (e.g. "focus on data lake migration")
-6. Click **Stop** — meeting is auto-saved
-7. Click **History** in the header to browse past meetings (transcript + analysis + diagrams)
+6. Click **Stop** — meeting is auto-saved (includes speaker mapping)
+7. Click **History** in the header to browse past meetings (transcript with mapped names + analysis + diagrams)
+
+### Speaker Mapping
+
+Open the **Speakers tab** in the analysis panel during a meeting:
+
+- **Talk-time bars** show word count per speaker (updates live)
+- For each detected speaker, set their **Name** (select from participants list or type), **Organization** (AWS / Customer / AWS Partner / Other), and **Role** (filtered by org)
+- Role dropdowns show a tooltip with the role's domain expertise description
+- Click **Apply Mapping & Re-analyze** to persist the mapping and trigger a fresh analysis with participant context
+
+Speaker corrections made in the transcript panel are batched and synced to the backend on each new segment.
 
 ### SA Directives (steering Track B)
 
-Type any directive into the text bar at the bottom of the analysis panel, or use the pre-canned buttons. Examples:
+Use the pre-canned buttons or type any directive into the bar at the bottom of the analysis panel. Examples:
 - `Focus on data lake migration to S3 + Glue`
 - `Customer is price sensitive — emphasize cost optimization`
 - `Compare with on-prem Databricks`
 
 Track B runs a separate Sonnet analysis cycle with your directive injected into the prompt.
+
+The pre-canned directive buttons are configurable — see `DEFAULT_DIRECTIVES` in the Configuration Reference below.
 
 ---
 
@@ -402,13 +427,14 @@ awssameetingassistant/
 ├── backend/
 │   ├── main.py                      # FastAPI app — REST + WebSocket endpoints
 │   ├── config.py                    # All settings from .env (pydantic-settings)
+│   ├── roles.py                     # Role expertise descriptions (26 roles, injected into Sonnet prompts)
 │   ├── storage.py                   # Meeting JSON persistence (meetings/ dir)
 │   ├── audio/capture.py             # Mic capture, fake audio fallback
 │   ├── ccm/
 │   │   ├── engine.py                # Conversation Context Map engine (<10ms/call)
 │   │   └── models.py                # CCMState, CCMUpdateEvent dataclasses
 │   ├── analysis/
-│   │   ├── engine.py                # Two-track staged analysis (Haiku + Sonnet)
+│   │   ├── engine.py                # Two-track staged analysis (Haiku + Sonnet) + speaker mapping
 │   │   ├── models.py                # AnalysisResult, meeting types
 │   │   └── prompts.py               # All LLM prompts (query gen, analysis, directives)
 │   ├── knowledge_base/
@@ -426,20 +452,22 @@ awssameetingassistant/
 ├── frontend/
 │   ├── src/
 │   │   ├── App.tsx                  # Two-panel layout, history button, save-on-stop
-│   │   ├── store/meetingStore.ts    # Zustand state (transcript, analysis, session meta)
+│   │   ├── store/meetingStore.ts    # Zustand state (transcript, analysis, speaker mappings, session meta)
 │   │   ├── hooks/useWebSocket.ts    # WS with exponential-backoff reconnect
-│   │   ├── types/index.ts           # All TypeScript types
+│   │   ├── types/index.ts           # All TypeScript types (ParticipantInfo, SpeakerMappings, etc.)
 │   │   └── components/
-│   │       ├── TranscriptPanel.tsx  # Full transcript, auto-scroll, speaker labels
-│   │       ├── AnalysisPanel.tsx    # Auto | Steered | Diagrams tabs
+│   │       ├── TranscriptPanel.tsx  # Full transcript, auto-scroll, speaker filter, correction flush
+│   │       ├── TranscriptChunkItem.tsx # Per-line chunk with clickable speaker re-attribution
+│   │       ├── AnalysisPanel.tsx    # Auto | Steered | Diagrams | Speakers tabs
+│   │       ├── SpeakerMappingPanel.tsx # Talk-time bars + speaker-to-person mapping table
 │   │       ├── AnalysisView.tsx     # Shared analysis renderer (live + past meetings)
 │   │       ├── DiagramsPanel.tsx    # Three-diagram tab switcher
 │   │       ├── MermaidRender.tsx    # Mermaid render queue + DiagramView component
-│   │       ├── DirectivesBar.tsx    # SA directive input + pre-canned buttons
-│   │       ├── PastMeetingsDrawer.tsx # History drawer + MeetingDetail viewer
+│   │       ├── DirectivesBar.tsx    # SA directive input + config-driven pre-canned buttons
+│   │       ├── PastMeetingsDrawer.tsx # History drawer + MeetingDetail viewer (speaker names)
 │   │       ├── RecommendationsPanel.tsx
 │   │       ├── RecommendationCard.tsx
-│   │       └── StartMeetingModal.tsx
+│   │       └── StartMeetingModal.tsx # Meeting name, type, customer ID, participants, roles checklist
 │   └── package.json
 ├── scripts/
 │   ├── setup_kb.py                  # One-time: create Bedrock KB infrastructure
@@ -481,6 +509,8 @@ awssameetingassistant/
 | `AGENTCORE_RUNTIME_ARN` | *(optional)* | AgentCore Runtime ARN after `agentcore deploy` |
 | `AGENTCORE_MEMORY_ID` | *(optional)* | AgentCore Memory ID from `setup_agentcore.py` |
 | `AGENTCORE_MEMORY_STRATEGY_ID` | *(optional)* | Memory strategy ID from `setup_agentcore.py` |
+| `DEFAULT_MEETING_ROLES` | *(26 built-in roles)* | Comma-separated roles shown in Start Meeting modal checklist |
+| `DEFAULT_DIRECTIVES` | *(14 built-in directives)* | Comma-separated SA steering tags shown as quick-click buttons in the directives bar |
 
 ---
 
@@ -510,6 +540,8 @@ No AWS credentials needed — KB and Bedrock calls are mocked.
 | Frontend not connecting | Confirm backend is on port 8000; check browser console for WS errors |
 | Mermaid diagram not rendering | Open DevTools (F12) → Console for render errors; click "Source" to inspect raw diagram |
 | Past meetings drawer empty | Meetings are saved on Stop — start and stop a meeting first |
+| Speaker labels show `spk_0` not names | Open the **Speakers tab**, map each speaker, then click **Apply Mapping** |
+| Speaker tab shows no speakers | Diarization data appears after the first final transcript segment; check `STT_PROVIDER=transcribe` (Whisper diarization requires pyannote) |
 | AgentCore: no recommendations | Verify `AGENTCORE_RUNTIME_ARN` is set and agent is deployed and healthy |
 
 ---
@@ -520,7 +552,8 @@ See **[PLAN.md](PLAN.md)** for the full phased roadmap. Summary:
 
 - **Phase 1** ✅ — Live transcript, CCM, two-track analysis, diagrams, SA directives, meeting persistence
 - **Phase 2** — Multi-agent parallel search (architecture, migration, cost, security agents), Revision Agent
-- **Phase 3** — Speaker diarization UI, system audio auto-config (BlackHole/VB-Cable wizard)
+- **Phase 3** ✅ — Speaker diarization UI: talk-time bars, speaker-to-person mapping, inline re-attribution, role-aware analysis prompts, config-driven directives
+- **Phase 3b** — System audio auto-config wizard (BlackHole/VB-Cable setup guide)
 - **Phase 4** — Electron desktop overlay (always-on-top, picture-in-picture)
 - **Phase 5** — Configurable `sources.yaml`, scheduled ingestion, GitHub + YouTube indexing
 

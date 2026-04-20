@@ -1,4 +1,4 @@
-import { Component, useState } from "react";
+import { Component, useState, useRef, useCallback } from "react";
 import type { ReactNode } from "react";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useMeetingStore } from "./store/meetingStore";
@@ -57,6 +57,36 @@ export default function App() {
 
   const [showModal, setShowModal] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+
+  // Resizable split — transcript left, analysis right (clamped 20–80%)
+  const [splitPct, setSplitPct] = useState(55);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const dragging = useRef(false);
+
+  const onDividerMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    dragging.current = true;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    const onMouseMove = (mv: MouseEvent) => {
+      if (!dragging.current || !containerRef.current) return;
+      const { left, width } = containerRef.current.getBoundingClientRect();
+      const pct = ((mv.clientX - left) / width) * 100;
+      setSplitPct(Math.min(80, Math.max(20, pct)));
+    };
+
+    const onMouseUp = () => {
+      dragging.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  }, []);
 
   async function startMeeting(
     customerId: string,
@@ -192,15 +222,31 @@ export default function App() {
         </div>
       </header>
 
-      {/* Main two-column layout */}
-      <div className="flex flex-1 min-h-0">
-        {/* Left: Transcript (55%) */}
-        <div className="flex flex-col w-[55%] border-r border-slate-700 min-h-0">
+      {/* Main two-column layout — resizable */}
+      <div ref={containerRef} className="flex flex-1 min-h-0 relative">
+        {/* Left: Transcript */}
+        <div className="flex flex-col min-h-0 min-w-0" style={{ width: `${splitPct}%` }}>
           <TranscriptPanel />
         </div>
 
-        {/* Right: Live Analysis (45%) */}
-        <div className="flex flex-col w-[45%] min-h-0">
+        {/* Drag handle */}
+        <div
+          onMouseDown={onDividerMouseDown}
+          className="w-1 shrink-0 bg-slate-700 hover:bg-blue-500 cursor-col-resize transition-colors active:bg-blue-400 relative group"
+          title="Drag to resize"
+        >
+          {/* Wider invisible hit target */}
+          <div className="absolute inset-y-0 -left-1 -right-1" />
+          {/* Visual grip dots */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col gap-0.5 opacity-0 group-hover:opacity-60 transition-opacity pointer-events-none">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="w-0.5 h-0.5 rounded-full bg-slate-300" />
+            ))}
+          </div>
+        </div>
+
+        {/* Right: Live Analysis */}
+        <div className="flex flex-col min-h-0 min-w-0 flex-1">
           <PanelErrorBoundary>
             <AnalysisPanel />
           </PanelErrorBoundary>

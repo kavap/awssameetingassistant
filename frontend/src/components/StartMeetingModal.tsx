@@ -73,7 +73,7 @@ export function StartMeetingModal({ onConfirm, onCancel }: Props) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const participants = participantsText
-      .split("\n")
+      .split(/[\n;]+/)
       .map((l) => l.trim())
       .filter(Boolean);
     onConfirm(
@@ -161,12 +161,12 @@ export function StartMeetingModal({ onConfirm, onCancel }: Props) {
             <textarea
               value={participantsText}
               onChange={(e) => setParticipantsText(e.target.value)}
-              placeholder={"John Smith (AWS SA)\nJane Doe (Acme CTO)\nAlex Lee (Partner Architect)"}
+              placeholder={"John Smith (AWS SA); Jane Doe (Acme CTO); Alex Lee (Partner Architect)"}
               rows={4}
               className="w-full bg-slate-700 border border-slate-600 text-slate-100 text-sm rounded-lg px-3 py-2 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none font-mono"
             />
             <p className="mt-1 text-xs text-slate-500">
-              Paste names or emails. Used to map speaker IDs to people during the meeting.
+              Paste names or emails separated by <code className="text-slate-400">;</code> (Outlook) or new lines.
             </p>
           </div>
 
