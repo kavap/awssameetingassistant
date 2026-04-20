@@ -1,4 +1,4 @@
-import { Component, useState, useRef, useCallback } from "react";
+import { Component, useState, useRef, useCallback, useEffect } from "react";
 import type { ReactNode } from "react";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useMeetingStore } from "./store/meetingStore";
@@ -50,6 +50,19 @@ function StatusDot({ status }: { status: string }) {
 
 export default function App() {
   useWebSocket();
+
+  const setOwnerParticipant = useMeetingStore((s) => s.setOwnerParticipant);
+
+  // Fetch owner profile once on startup so it's available in the Speakers tab
+  // before the Start Meeting modal is ever opened.
+  useEffect(() => {
+    fetch(`${BACKEND}/meeting/config`)
+      .then((r) => r.json())
+      .then((data: { owner_participant?: string }) => {
+        if (data.owner_participant) setOwnerParticipant(data.owner_participant);
+      })
+      .catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const connectionStatus = useMeetingStore((s) => s.connectionStatus);
   const meetingStatus = useMeetingStore((s) => s.meetingStatus);
