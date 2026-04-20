@@ -55,8 +55,8 @@ export function SpeakerMappingPanel() {
   const ownerParticipant = useMeetingStore((s) => s.ownerParticipant);
   // Always show owner first, then meeting participants (deduplicated)
   const participants = useMemo(() => {
-    if (!ownerParticipant) return rawParticipants;
-    return [ownerParticipant, ...rawParticipants.filter((p) => p !== ownerParticipant)];
+    const others = [...rawParticipants.filter((p) => p !== ownerParticipant)].sort();
+    return ownerParticipant ? [ownerParticipant, ...others] : others;
   }, [ownerParticipant, rawParticipants]);
   const speakerMappings = useMeetingStore((s) => s.speakerMappings);
   const setSpeakerMappings = useMeetingStore((s) => s.setSpeakerMappings);
