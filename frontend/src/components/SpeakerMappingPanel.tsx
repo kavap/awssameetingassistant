@@ -55,6 +55,7 @@ export function SpeakerMappingPanel() {
   const speakerMappings = useMeetingStore((s) => s.speakerMappings);
   const setSpeakerMappings = useMeetingStore((s) => s.setSpeakerMappings);
   const availableRoles = useMeetingStore((s) => s.availableRoles);
+  const roleDescriptions = useMeetingStore((s) => s.roleDescriptions);
   const meetingStatus = useMeetingStore((s) => s.meetingStatus);
 
   const [draft, setDraft] = useState<SpeakerMappings>(() => ({ ...speakerMappings }));
@@ -225,17 +226,27 @@ export function SpeakerMappingPanel() {
 
                   {/* Role — filtered by org */}
                   <div>
-                    <label className="block text-xs text-slate-500 mb-1">Role</label>
+                    <label className="block text-xs text-slate-500 mb-1">
+                      Role
+                      {info.role && roleDescriptions[info.role] && (
+                        <span
+                          className="ml-1 text-slate-600 cursor-help"
+                          title={roleDescriptions[info.role]}
+                        >
+                          ⓘ
+                        </span>
+                      )}
+                    </label>
                     <select
                       value={info.role}
                       onChange={(e) => setDraftField(sid, "role", e.target.value)}
                       disabled={!info.org}
+                      title={info.role ? (roleDescriptions[info.role] ?? undefined) : undefined}
                       className="w-full bg-slate-700 border border-slate-600 text-slate-100 text-xs rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-40"
                     >
                       <option value="">{info.org ? "— select —" : "Pick org first"}</option>
                       {filteredRoles.map((r) => (
-                        <option key={r} value={r}>
-                          {/* Strip the org prefix for display brevity */}
+                        <option key={r} value={r} title={roleDescriptions[r] ?? undefined}>
                           {r.replace(/^AWS |^Customer |^Partner /, "")}
                         </option>
                       ))}

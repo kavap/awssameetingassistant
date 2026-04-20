@@ -18,6 +18,8 @@ interface Props {
 export function StartMeetingModal({ onConfirm, onCancel }: Props) {
   const connectionStatus = useMeetingStore((s) => s.connectionStatus);
   const setAvailableRolesInStore = useMeetingStore((s) => s.setAvailableRoles);
+  const setRoleDescriptions = useMeetingStore((s) => s.setRoleDescriptions);
+  const [roleDescriptions, setRoleDescriptionsLocal] = useState<Record<string, string>>({});
   const [customerId, setCustomerId] = useState("");
   const [meetingType, setMeetingType] = useState<MeetingType>("Customer Meeting");
   const [meetingName, setMeetingName] = useState("");
@@ -30,10 +32,13 @@ export function StartMeetingModal({ onConfirm, onCancel }: Props) {
   useEffect(() => {
     fetch(`${BACKEND}/meeting/config`)
       .then((r) => r.json())
-      .then((data: { default_roles: string[] }) => {
+      .then((data: { default_roles: string[]; role_descriptions?: Record<string, string> }) => {
         const roles = data.default_roles ?? [];
         setAvailableRoles(roles);
         setAvailableRolesInStore(roles);
+        const descs = data.role_descriptions ?? {};
+        setRoleDescriptionsLocal(descs);
+        setRoleDescriptions(descs);
       })
       .catch(() => {
         const fallback = [
@@ -174,16 +179,16 @@ export function StartMeetingModal({ onConfirm, onCancel }: Props) {
             {availableRoles.length > 0 && (
               <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-3 space-y-3 max-h-48 overflow-y-auto">
                 {awsRoles.length > 0 && (
-                  <RoleGroup label="AWS" roles={awsRoles} selected={selectedRoles} onToggle={toggleRole} color="text-blue-400" />
+                  <RoleGroup label="AWS" roles={awsRoles} selected={selectedRoles} onToggle={toggleRole} color="text-blue-400" descriptions={roleDescriptions} />
                 )}
                 {customerRoles.length > 0 && (
-                  <RoleGroup label="Customer" roles={customerRoles} selected={selectedRoles} onToggle={toggleRole} color="text-emerald-400" />
+                  <RoleGroup label="Customer" roles={customerRoles} selected={selectedRoles} onToggle={toggleRole} color="text-emerald-400" descriptions={roleDescriptions} />
                 )}
                 {partnerRoles.length > 0 && (
-                  <RoleGroup label="Partner" roles={partnerRoles} selected={selectedRoles} onToggle={toggleRole} color="text-violet-400" />
+                  <RoleGroup label="Partner" roles={partnerRoles} selected={selectedRoles} onToggle={toggleRole} color="text-violet-400" descriptions={roleDescriptions} />
                 )}
                 {otherRoles.length > 0 && (
-                  <RoleGroup label="Other" roles={otherRoles} selected={selectedRoles} onToggle={toggleRole} color="text-slate-400" />
+                  <RoleGroup label="Other" roles={otherRoles} selected={selectedRoles} onToggle={toggleRole} color="text-slate-400" descriptions={roleDescriptions} />
                 )}
               </div>
             )}
@@ -245,12 +250,14 @@ function RoleGroup({
   selected,
   onToggle,
   color,
+  descriptions = {},
 }: {
   label: string;
   roles: string[];
   selected: Set<string>;
   onToggle: (r: string) => void;
   color: string;
+  descriptions?: Record<string, string>;
 }) {
   return (
     <div>
@@ -261,6 +268,7 @@ function RoleGroup({
             key={r}
             type="button"
             onClick={() => onToggle(r)}
+            title={descriptions[r] ?? undefined}
             className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
               selected.has(r)
                 ? "bg-blue-600/30 border-blue-500 text-blue-300"

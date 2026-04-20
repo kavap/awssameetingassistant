@@ -25,6 +25,7 @@ import boto3
 from botocore.config import Config
 
 from backend.config import settings
+from backend.roles import ROLE_DESCRIPTIONS
 from .models import AnalysisResult, AnalysisStage, MEETING_TYPES
 from .prompts import (
     QUERY_GEN_PROMPT,
@@ -432,27 +433,51 @@ class AnalysisEngine:
         return "\n".join(lines)
 
     def _build_participants_context(self) -> str:
-        """Build the participants context block for Sonnet when speaker mapping exists."""
+        """Build the participants context block for Sonnet when speaker mapping exists.
+
+        Injects:
+          - Participant list grouped by org
+          - Role expertise description (from ROLE_DESCRIPTIONS) for each mapped speaker
+          - Speaker-aware analysis guidelines
+        """
         if not self._speaker_mapping:
             return ""
-        by_org: dict[str, list[str]] = {}
+
+        # Group by org, preserving per-person info
+        by_org: dict[str, list[dict]] = {}
         for info in self._speaker_mapping.values():
             org = info.get("org", "Other")
-            name = info.get("name", "Unknown")
-            role = info.get("role", "")
-            entry = f"{name} ({role})" if role else name
-            by_org.setdefault(org, []).append(entry)
+            by_org.setdefault(org, []).append(info)
 
-        lines = ["MEETING PARTICIPANTS (confirmed by SA — use these identities when analyzing who said what):"]
-        for org in ["AWS", "Customer", "Partner", "Other"]:
-            if org in by_org:
-                lines.append(f"  {org}: {', '.join(by_org[org])}")
+        lines = [
+            "MEETING PARTICIPANTS (confirmed by SA — use these identities when analyzing "
+            "who said what and what each person's expertise is):"
+        ]
+
+        for org in ["AWS", "Customer", "AWS Partner", "Partner", "Other"]:
+            participants = by_org.get(org, [])
+            if not participants:
+                continue
+            lines.append(f"\n  {org} Team:")
+            for info in participants:
+                name = info.get("name", "Unknown")
+                role = info.get("role", "")
+                if role:
+                    lines.append(f"    - {name} | {role}")
+                    desc = ROLE_DESCRIPTIONS.get(role)
+                    if desc:
+                        lines.append(f"      Expertise: {desc}")
+                else:
+                    lines.append(f"    - {name}")
+
         lines.append("")
         lines.append("SPEAKER-AWARE ANALYSIS GUIDELINES:")
-        lines.append("- 'Situation' and 'Current State': derive primarily from CUSTOMER participant statements")
-        lines.append("- 'Customer Needs' and 'Open Questions': focus on questions and pain points from CUSTOMER participants")
-        lines.append("- If AWS participants made follow-up commitments, note them in 'Open Questions' as [ACTION: ...]")
-        lines.append("- The transcript below is annotated with [Name | Org | Role]: prefixes")
+        lines.append("- Derive 'Situation' and 'Current State' primarily from CUSTOMER participant statements")
+        lines.append("- Derive 'Customer Needs' and 'Open Questions' from CUSTOMER pain points and questions")
+        lines.append("- Weight SPECIALIST SA contributions toward their domain in 'Proposed Solution Architecture'")
+        lines.append("  (e.g. if AWS Analytics SA is present and discusses Redshift, prioritize that direction)")
+        lines.append("- If AWS participants made follow-up commitments, note them in 'Open Questions' as [ACTION: name — task]")
+        lines.append("- The transcript is annotated with [Name | Org | Role]: prefixes — use them to attribute statements")
         return "\n".join(lines) + "\n"
 
     async def _phase1_query_gen(
