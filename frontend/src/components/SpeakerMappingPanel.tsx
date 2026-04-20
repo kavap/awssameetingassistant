@@ -190,24 +190,19 @@ export function SpeakerMappingPanel() {
                 </div>
 
                 <div className="grid grid-cols-3 gap-2">
-                  {/* Name — free text with suggestions from participants list */}
+                  {/* Name */}
                   <div>
                     <label className="block text-xs text-slate-500 mb-1">Name</label>
-                    <input
-                      type="text"
+                    <select
                       value={info.name}
                       onChange={(e) => setDraftField(sid, "name", e.target.value)}
-                      list={`name-suggestions-${sid}`}
-                      placeholder="Full name"
-                      className="w-full bg-slate-700 border border-slate-600 text-slate-100 text-xs rounded px-2 py-1.5 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                    {participants.length > 0 && (
-                      <datalist id={`name-suggestions-${sid}`}>
-                        {participants.map((p) => (
-                          <option key={p} value={p} />
-                        ))}
-                      </datalist>
-                    )}
+                      className="w-full bg-slate-700 border border-slate-600 text-slate-100 text-xs rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    >
+                      <option value="">— select —</option>
+                      {participants.map((p) => (
+                        <option key={p} value={p}>{p}</option>
+                      ))}
+                    </select>
                   </div>
 
                   {/* Org — fixed dropdown */}
