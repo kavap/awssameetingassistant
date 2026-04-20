@@ -63,6 +63,7 @@ export interface AnalysisResult {
   sources: string[];
   current_state_diagram: string;
   mermaid_diagram: string;
+  action_items?: { aws: string[]; partner: string[]; customer: string[] };
   cycle_count: number;
   segment_count?: number;
   is_steered: boolean;

@@ -140,7 +140,7 @@ def _parse_json_safe(text: str) -> dict:
 _SECTION_NAMES = (
     "Situation|Current State|Customer Needs|Open Questions"
     "|Proposed Solution Architecture|Key Recommendations|Sources"
-    "|Current State Diagram|Future State Diagram"
+    "|Action Items|Current State Diagram|Future State Diagram"
 )
 # Lookahead stops ONLY at the next known section header, not at any bold text inside content
 _SECTION_RE = re.compile(
@@ -164,6 +164,35 @@ def _extract_sections(text: str) -> dict[str, str]:
 def _extract_sources(sections: dict[str, str]) -> list[str]:
     raw = sections.get("Sources", "")
     return [u.strip() for u in re.findall(r"https?://\S+", raw)]
+
+
+def _parse_action_items(raw: str) -> dict:
+    """Parse action items section into {aws, partner, customer} lists.
+
+    Expects lines like:
+      AWS:
+      - Do something
+      Customer:
+      - Do something else
+    """
+    result: dict[str, list[str]] = {"aws": [], "partner": [], "customer": []}
+    current_key: str | None = None
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        lower = stripped.lower().rstrip(":")
+        if lower in ("aws", "amazon", "amazon web services"):
+            current_key = "aws"
+        elif lower in ("customer", "client", "customer team"):
+            current_key = "customer"
+        elif lower in ("partner", "aws partner", "partner team"):
+            current_key = "partner"
+        elif stripped.startswith("-") and current_key:
+            item = stripped.lstrip("-").strip()
+            if item:
+                result[current_key].append(item)
+    return result
 
 
 def _strip_mermaid_fence(text: str) -> str:
@@ -203,6 +232,8 @@ def _build_result(
             current_diag = ""
             future_diag = ""
 
+    action_items = _parse_action_items(s.get("Action Items", "")) if stage >= 2 else {"aws": [], "partner": [], "customer": []}
+
     return AnalysisResult(
         stage=stage,
         ready=ready,
@@ -216,6 +247,7 @@ def _build_result(
         sources=_extract_sources(s),
         current_state_diagram=current_diag,
         mermaid_diagram=future_diag,
+        action_items=action_items,
         cycle_count=cycle_count,
         segment_count=segment_count,
         is_steered=is_steered,
@@ -678,6 +710,15 @@ class AnalysisEngine:
             parts.append(f"**Key Recommendations:**\n{r.key_recommendations}")
         if r.sources:
             parts.append(f"**Sources:**\n" + "\n".join(r.sources))
+        ai = r.action_items
+        if any(ai.get(k) for k in ("aws", "partner", "customer")):
+            lines = ["**Action Items:**"]
+            for group, key in [("AWS", "aws"), ("Customer", "customer"), ("Partner", "partner")]:
+                items = ai.get(key, [])
+                if items:
+                    lines.append(f"{group}:")
+                    lines.extend(f"- {item}" for item in items)
+            parts.append("\n".join(lines))
         if r.current_state_diagram:
             parts.append(f"**Current State Diagram:**\n{r.current_state_diagram}")
         if r.mermaid_diagram:

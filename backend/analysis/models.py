@@ -37,6 +37,7 @@ class AnalysisResult:
     sources: list[str] = field(default_factory=list)
     current_state_diagram: str = ""   # Mermaid: customer's current architecture (Stage 3)
     mermaid_diagram: str = ""         # Mermaid: proposed future state (Stage 3)
+    action_items: dict = field(default_factory=lambda: {"aws": [], "partner": [], "customer": []})
     cycle_count: int = 0
     segment_count: int = 0         # AnalysisEngine final-segment count (for stage debug)
     is_steered: bool = False      # True = Track B (directive-influenced)
@@ -57,6 +58,7 @@ class AnalysisResult:
             "sources": self.sources,
             "current_state_diagram": self.current_state_diagram,
             "mermaid_diagram": self.mermaid_diagram,
+            "action_items": self.action_items,
             "cycle_count": self.cycle_count,
             "segment_count": self.segment_count,
             "is_steered": self.is_steered,

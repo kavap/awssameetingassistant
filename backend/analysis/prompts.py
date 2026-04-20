@@ -112,6 +112,18 @@ Use bullet points for clarity. Bold sub-topics are fine.]
 [Stage 1: omit this section entirely.
  Stage 2+: List source URLs from the knowledge base that grounded your response.]
 
+**Action Items:**
+[Stage 1: omit this section entirely.
+ Stage 2+: List concrete follow-up actions that emerged from this meeting, grouped by responsible party.
+ Use EXACTLY this format — one group header per line, bullets beneath:
+ AWS:
+ - [Specific action for the AWS team]
+ Customer:
+ - [Specific action for the customer]
+ Partner:
+ - [Specific action for a partner, if present and applicable]
+ Only include groups that have real action items. Focus on commitments, demos, answers promised, or next steps explicitly or implicitly raised in the meeting.]
+
 **Current State Diagram:**
 [Stage 1 and 2: omit this section entirely.
  Stage 3: Mermaid flowchart showing the customer's CURRENT architecture. \

@@ -4,8 +4,9 @@ import { DirectivesBar } from "./DirectivesBar";
 import { DiagramsPanel } from "./DiagramsPanel";
 import { AnalysisView } from "./AnalysisView";
 import { SpeakerMappingPanel } from "./SpeakerMappingPanel";
+import { ActionItemsPanel } from "./ActionItemsPanel";
 
-type AnalysisTab = "auto" | "steered" | "diagrams" | "speakers";
+type AnalysisTab = "auto" | "steered" | "diagrams" | "speakers" | "actions";
 
 export function AnalysisPanel() {
   const analysisTrackA = useMeetingStore((s) => s.analysisTrackA);
@@ -32,6 +33,10 @@ export function AnalysisPanel() {
 
   const hasSpeakers = transcriptChunks.some((c) => c.speaker !== null);
   const hasMapping = Object.keys(speakerMappings).length > 0;
+
+  const hasActionItems = [analysisTrackA, analysisTrackB].some((r) =>
+    r?.action_items && Object.values(r.action_items).some((arr) => arr.length > 0)
+  );
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -112,6 +117,23 @@ export function AnalysisPanel() {
           Speakers
           {(hasSpeakers || hasMapping) && <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />}
         </button>
+
+        {/* Actions tab */}
+        <button
+          onClick={() => setActiveTab("actions")}
+          className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${
+            activeTab === "actions"
+              ? "border-orange-500 text-slate-100"
+              : "border-transparent text-slate-500 hover:text-slate-300"
+          }`}
+        >
+          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          Actions
+          {hasActionItems && <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />}
+        </button>
       </div>
 
       {/* Tab content */}
@@ -122,6 +144,10 @@ export function AnalysisPanel() {
       ) : activeTab === "speakers" ? (
         <div className="flex-1 min-h-0">
           <SpeakerMappingPanel />
+        </div>
+      ) : activeTab === "actions" ? (
+        <div className="flex-1 min-h-0">
+          <ActionItemsPanel />
         </div>
       ) : (
         <div className="flex flex-col flex-1 min-h-0">

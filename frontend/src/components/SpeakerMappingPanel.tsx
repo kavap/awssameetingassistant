@@ -102,9 +102,9 @@ export function SpeakerMappingPanel() {
     const prefix = orgToRolePrefix(org as OrgOption);
     if (!prefix) return availableRoles;
     const standardPrefixes = ["AWS ", "Customer ", "Partner "];
-    return availableRoles.filter(
-      (r) => r.startsWith(prefix) || !standardPrefixes.some((p) => r.startsWith(p)),
-    );
+    return availableRoles
+      .filter((r) => r.startsWith(prefix) || !standardPrefixes.some((p) => r.startsWith(p)))
+      .sort();
   }
 
   async function applyMapping() {

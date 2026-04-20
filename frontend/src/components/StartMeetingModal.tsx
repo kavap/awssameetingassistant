@@ -85,11 +85,12 @@ export function StartMeetingModal({ onConfirm, onCancel }: Props) {
     );
   }
 
-  // Group roles by category
-  const awsRoles = availableRoles.filter((r) => r.startsWith("AWS"));
-  const customerRoles = availableRoles.filter((r) => r.startsWith("Customer"));
-  const partnerRoles = availableRoles.filter((r) => r.startsWith("Partner"));
-  const otherRoles = availableRoles.filter(
+  // Group roles by category — sorted alphabetically within each group
+  const sorted = [...availableRoles].sort();
+  const awsRoles = sorted.filter((r) => r.startsWith("AWS"));
+  const customerRoles = sorted.filter((r) => r.startsWith("Customer"));
+  const partnerRoles = sorted.filter((r) => r.startsWith("Partner"));
+  const otherRoles = sorted.filter(
     (r) => !r.startsWith("AWS") && !r.startsWith("Customer") && !r.startsWith("Partner"),
   );
 
