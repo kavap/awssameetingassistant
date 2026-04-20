@@ -9,14 +9,18 @@ A real-time AI assistant for AWS Solutions Architects. Listens to live customer 
 | Feature | Description |
 |---|---|
 | **Live Transcript** | Real-time speech-to-text with speaker labels, full session history |
-| **Speaker Diarization + Mapping** | Per-speaker talk-time bars, map speaker IDs to names/org/role mid-meeting |
+| **Speaker Diarization + Mapping** | Per-speaker talk-time bars, map speaker IDs to names/org/role mid-meeting; dropdowns sorted alphabetically |
 | **Speaker Re-attribution** | Click any transcript line's speaker label to correct mis-attributed segments inline |
 | **Role-Aware Analysis** | Speaker roles injected into Sonnet prompt with domain expertise context |
+| **Action Items** | Extracted AWS / Customer / Partner action items shown in dedicated tab (Stage 2+) |
+| **Stage Labels** | Header shows stage number + description (e.g. `Stage 2 · Direction emerging`) |
+| **Owner Profile** | SA's own name auto-pinned as first option in speaker Name dropdown; set via `USER_*` env vars |
 | **Conversation Context Map (CCM)** | Per-segment extraction of AWS services, topics, open questions |
 | **Two-Track Analysis** | Track A (auto) + Track B (SA-steered via directives); 3-stage progression |
 | **Architecture Diagrams** | Mermaid diagrams: current state, future state auto, future state steered |
 | **Recommendation Cards** | Instant cards with AWS docs links, action items, code references |
 | **SA Directives** | Pre-canned or custom directives to steer Track B mid-meeting; configurable via `.env` |
+| **Resizable Panels** | Drag the divider between transcript and analysis panels (20–80% range) |
 | **Past Meetings** | All meetings auto-saved as JSON; browse, replay, and compare (with speaker names) |
 | **Meeting Types** | 8 types (Customer Meeting, OneTeam, SA Manager Sync, etc.) |
 | **AgentCore** | Optional: deploy recommendation agent to Bedrock AgentCore Runtime + cross-session Memory |
@@ -360,7 +364,7 @@ If you also use AgentCore:
    - **Meeting Name** (optional, shown in history)
    - **Meeting Type** (Customer Meeting, OneTeam, etc.)
    - **Customer ID** (optional, used to load prior context from AgentCore Memory)
-   - **Participants** — paste names/emails one per line; used to map speaker IDs during the call
+   - **Participants** — paste names/emails separated by `;` (Outlook copy-paste) or new lines; used to map speaker IDs during the call
    - **Roles Present** — select all roles attending (AWS / Customer / Partner); used to enrich analysis prompts
 3. Watch the transcript stream in real-time (left panel)
    - Speaker labels show mapped names (e.g. "John S.") once mapped in the Speakers tab
