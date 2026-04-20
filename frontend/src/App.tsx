@@ -52,14 +52,22 @@ export default function App() {
   useWebSocket();
 
   const setOwnerParticipant = useMeetingStore((s) => s.setOwnerParticipant);
+  const setAvailableRoles = useMeetingStore((s) => s.setAvailableRoles);
+  const setRoleDescriptions = useMeetingStore((s) => s.setRoleDescriptions);
 
-  // Fetch owner profile once on startup so it's available in the Speakers tab
-  // before the Start Meeting modal is ever opened.
+  // Fetch config once on startup: owner profile + roles + role descriptions.
+  // This ensures the Speakers tab works even before the Start Meeting modal is opened.
   useEffect(() => {
     fetch(`${BACKEND}/meeting/config`)
       .then((r) => r.json())
-      .then((data: { owner_participant?: string }) => {
+      .then((data: {
+        owner_participant?: string;
+        default_roles?: string[];
+        role_descriptions?: Record<string, string>;
+      }) => {
         if (data.owner_participant) setOwnerParticipant(data.owner_participant);
+        if (data.default_roles?.length) setAvailableRoles(data.default_roles);
+        if (data.role_descriptions) setRoleDescriptions(data.role_descriptions);
       })
       .catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
