@@ -298,10 +298,15 @@ async def get_meeting_state():
 
 @app.get("/meeting/config")
 async def get_meeting_config():
-    """Return frontend configuration: default roles list + role descriptions."""
+    """Return frontend configuration: roles, role descriptions, and canned directives."""
     from backend.roles import ROLE_DESCRIPTIONS
     roles = [r.strip() for r in settings.default_meeting_roles.split(",") if r.strip()]
-    return {"default_roles": roles, "role_descriptions": ROLE_DESCRIPTIONS}
+    directives = [d.strip() for d in settings.default_directives.split(",") if d.strip()]
+    return {
+        "default_roles": roles,
+        "role_descriptions": ROLE_DESCRIPTIONS,
+        "default_directives": directives,
+    }
 
 
 @app.post("/meeting/start")

@@ -87,6 +87,25 @@ class Settings(BaseSettings):
         "Partner Practice Lead"
     )
 
+    # SA steering directives shown as quick-click buttons in the DirectivesBar.
+    # Comma-separated. Edit here or override via DEFAULT_DIRECTIVES env var.
+    default_directives: str = (
+        "Serverless preferred,"
+        "Cost-sensitive customer,"
+        "Security & compliance first,"
+        "Focus on migration path,"
+        "Lift & shift approach,"
+        "Modernize & re-architect,"
+        "Competitive displacement,"
+        "GenAI / Bedrock focus,"
+        "Multi-region required,"
+        "Customer is on Azure,"
+        "Customer is on GCP,"
+        "Open source preferred,"
+        "Data sovereignty / on-prem hybrid,"
+        "Prioritize managed services"
+    )
+
     # Development / testing
     use_fake_audio: bool = False
     fake_audio_path: str = "data/test_audio.wav"

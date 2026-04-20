@@ -1,24 +1,36 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const BACKEND = "http://localhost:8000";
 
-const CANNED_DIRECTIVES = [
+// Fallback shown while config is loading or if backend is unreachable
+const FALLBACK_DIRECTIVES = [
   "Serverless preferred",
   "Cost-sensitive customer",
   "Security & compliance first",
   "Focus on migration path",
-  "Lift & shift approach",
-  "Modernize & re-architect",
-  "Competitive displacement",
   "GenAI / Bedrock focus",
-  "Multi-region required",
-  "Customer is on Azure",
+  "Competitive displacement",
 ];
 
 export function DirectivesBar() {
+  const [cannedDirectives, setCannedDirectives] = useState<string[]>(FALLBACK_DIRECTIVES);
   const [input, setInput] = useState("");
   const [sent, setSent] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  // Fetch directives from config endpoint (shared with StartMeetingModal)
+  useEffect(() => {
+    fetch(`${BACKEND}/meeting/config`)
+      .then((r) => r.json())
+      .then((data: { default_directives?: string[] }) => {
+        if (data.default_directives?.length) {
+          setCannedDirectives(data.default_directives);
+        }
+      })
+      .catch(() => {
+        // Keep fallback list — backend may not be up yet
+      });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function sendDirective(directive: string) {
     const d = directive.trim();
@@ -74,9 +86,9 @@ export function DirectivesBar() {
         </div>
       )}
 
-      {/* Pre-canned buttons */}
+      {/* Canned directive buttons */}
       <div className="flex flex-wrap gap-1">
-        {CANNED_DIRECTIVES.map((d) => (
+        {cannedDirectives.map((d) => (
           <button
             key={d}
             onClick={() => sendDirective(d)}
