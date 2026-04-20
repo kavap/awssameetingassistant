@@ -142,6 +142,12 @@ export default function App() {
   const isRecording = meetingStatus === "recording";
   const stage = analysisTrackA?.stage ?? null;
 
+  const STAGE_LABELS: Record<number, string> = {
+    1: "Gathering context",
+    2: "Direction emerging",
+    3: "Full picture",
+  };
+
   return (
     <div className="flex flex-col h-screen bg-slate-900 text-slate-200">
       {/* Header */}
@@ -166,14 +172,16 @@ export default function App() {
               LIVE
             </div>
             {stage && (
-              <span className={`text-xs px-2 py-0.5 rounded-full border ${
+              <span className={`flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full border ${
                 stage === 3
                   ? "text-emerald-400 bg-emerald-900/30 border-emerald-700"
                   : stage === 2
                   ? "text-blue-400 bg-blue-900/30 border-blue-700"
                   : "text-yellow-400 bg-yellow-900/30 border-yellow-700"
               }`}>
-                Stage {stage}
+                <span className="font-medium">Stage {stage}</span>
+                <span className="opacity-60">·</span>
+                <span className="opacity-75">{STAGE_LABELS[stage]}</span>
               </span>
             )}
           </div>

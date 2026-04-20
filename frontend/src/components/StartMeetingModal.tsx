@@ -19,6 +19,7 @@ export function StartMeetingModal({ onConfirm, onCancel }: Props) {
   const connectionStatus = useMeetingStore((s) => s.connectionStatus);
   const setAvailableRolesInStore = useMeetingStore((s) => s.setAvailableRoles);
   const setRoleDescriptions = useMeetingStore((s) => s.setRoleDescriptions);
+  const setOwnerParticipant = useMeetingStore((s) => s.setOwnerParticipant);
   const [roleDescriptions, setRoleDescriptionsLocal] = useState<Record<string, string>>({});
   const [customerId, setCustomerId] = useState("");
   const [meetingType, setMeetingType] = useState<MeetingType>("Customer Meeting");
@@ -32,13 +33,16 @@ export function StartMeetingModal({ onConfirm, onCancel }: Props) {
   useEffect(() => {
     fetch(`${BACKEND}/meeting/config`)
       .then((r) => r.json())
-      .then((data: { default_roles: string[]; role_descriptions?: Record<string, string> }) => {
+      .then((data: { default_roles: string[]; role_descriptions?: Record<string, string>; owner_participant?: string }) => {
         const roles = data.default_roles ?? [];
         setAvailableRoles(roles);
         setAvailableRolesInStore(roles);
         const descs = data.role_descriptions ?? {};
         setRoleDescriptionsLocal(descs);
         setRoleDescriptions(descs);
+        if (data.owner_participant) {
+          setOwnerParticipant(data.owner_participant);
+        }
       })
       .catch(() => {
         const fallback = [

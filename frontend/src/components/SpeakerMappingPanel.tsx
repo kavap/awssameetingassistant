@@ -51,7 +51,13 @@ function barColor(speakerId: string): string {
 
 export function SpeakerMappingPanel() {
   const talkTime = useTalkTime();
-  const participants = useMeetingStore((s) => s.participants);
+  const rawParticipants = useMeetingStore((s) => s.participants);
+  const ownerParticipant = useMeetingStore((s) => s.ownerParticipant);
+  // Always show owner first, then meeting participants (deduplicated)
+  const participants = useMemo(() => {
+    if (!ownerParticipant) return rawParticipants;
+    return [ownerParticipant, ...rawParticipants.filter((p) => p !== ownerParticipant)];
+  }, [ownerParticipant, rawParticipants]);
   const speakerMappings = useMeetingStore((s) => s.speakerMappings);
   const setSpeakerMappings = useMeetingStore((s) => s.setSpeakerMappings);
   const availableRoles = useMeetingStore((s) => s.availableRoles);

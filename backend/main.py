@@ -298,14 +298,26 @@ async def get_meeting_state():
 
 @app.get("/meeting/config")
 async def get_meeting_config():
-    """Return frontend configuration: roles, role descriptions, and canned directives."""
+    """Return frontend configuration: roles, role descriptions, canned directives, and owner profile."""
     from backend.roles import ROLE_DESCRIPTIONS
     roles = [r.strip() for r in settings.default_meeting_roles.split(",") if r.strip()]
     directives = [d.strip() for d in settings.default_directives.split(",") if d.strip()]
+
+    # Build owner participant display string: "Lastname, Firstname <email>"
+    owner_participant: str | None = None
+    fn, ln, em = settings.user_first_name.strip(), settings.user_last_name.strip(), settings.user_email.strip()
+    if fn or ln:
+        if ln and fn:
+            name_part = f"{ln}, {fn}"
+        else:
+            name_part = ln or fn
+        owner_participant = f"{name_part} <{em}>" if em else name_part
+
     return {
         "default_roles": roles,
         "role_descriptions": ROLE_DESCRIPTIONS,
         "default_directives": directives,
+        "owner_participant": owner_participant,
     }
 
 

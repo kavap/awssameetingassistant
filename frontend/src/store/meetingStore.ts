@@ -38,6 +38,8 @@ interface MeetingStore {
   availableRoles: string[];
   // Role descriptions keyed by role name — used for tooltips and Sonnet context
   roleDescriptions: Record<string, string>;
+  // Owner/SA profile — auto-prepended to participant dropdowns
+  ownerParticipant: string | null;
 
   // Pending speaker corrections not yet flushed to backend (chunkId → newSpeakerId)
   pendingCorrections: Record<string, string>;
@@ -64,6 +66,7 @@ interface MeetingStore {
   updateSpeakerMapping: (speakerId: string, info: ParticipantInfo) => void;
   setAvailableRoles: (roles: string[]) => void;
   setRoleDescriptions: (descriptions: Record<string, string>) => void;
+  setOwnerParticipant: (name: string | null) => void;
   correctChunkSpeaker: (chunkId: string, newSpeakerId: string) => void;
   flushPendingCorrections: () => Record<string, string>;
   reset: () => void;
@@ -88,6 +91,7 @@ export const useMeetingStore = create<MeetingStore>((set, get) => ({
   speakerMappings: {},
   availableRoles: [],
   roleDescriptions: {},
+  ownerParticipant: null,
   pendingCorrections: {},
 
   appendFinalChunk: (text, speaker, ts) =>
@@ -143,6 +147,8 @@ export const useMeetingStore = create<MeetingStore>((set, get) => ({
 
   setRoleDescriptions: (descriptions) => set({ roleDescriptions: descriptions }),
 
+  setOwnerParticipant: (ownerParticipant) => set({ ownerParticipant }),
+
   correctChunkSpeaker: (chunkId, newSpeakerId) =>
     set((state) => ({
       transcriptChunks: state.transcriptChunks.map((c) =>
@@ -176,6 +182,7 @@ export const useMeetingStore = create<MeetingStore>((set, get) => ({
       speakerMappings: {},
       availableRoles: [],
       roleDescriptions: {},
+      ownerParticipant: null,
       pendingCorrections: {},
     }),
 }));

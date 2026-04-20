@@ -106,6 +106,11 @@ class Settings(BaseSettings):
         "Prioritize managed services"
     )
 
+    # Owner / SA profile — auto-added to participant dropdown in speaker mapping
+    user_first_name: str = ""
+    user_last_name: str = ""
+    user_email: str = ""
+
     # Development / testing
     use_fake_audio: bool = False
     fake_audio_path: str = "data/test_audio.wav"
