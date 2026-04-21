@@ -65,6 +65,8 @@ WebSocket → React/TypeScript Frontend
 Meeting Storage  — auto-saved JSON on stop (includes speaker mapping), browsable in Past Meetings drawer
 ```
 
+For a deep dive into control flow, all prompts, deterministic vs probabilistic stages, and key concepts (segment, cycle, phase, stage, trigger), see **[DESIGN.md](DESIGN.md)**.
+
 ---
 
 ## Prerequisites
