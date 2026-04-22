@@ -23,6 +23,7 @@ export function useWebSocket() {
     setMeetingStatus,
     setSessionMeta,
     setSpeakerMappings,
+    reset,
   } = useMeetingStore();
 
   useEffect(() => {
@@ -105,6 +106,7 @@ export function useWebSocket() {
               participants: string[];
               selected_roles: string[];
             };
+            reset();  // clear previous meeting's transcript, analysis, recommendations, speaker mappings
             setMeetingStatus("recording");
             setSessionMeta(
               ms.session_id,
