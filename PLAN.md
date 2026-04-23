@@ -59,6 +59,34 @@ Full working stack as of tag `WORKINGV2`:
 - YouTube transcript indexer — AWS re:Invent talks, AWS On Air episodes
 - Version-tagged KB snapshots so you can roll back
 
+### Phase 6 — Slack-Integrated AWS Team Assistant
+**Goal:** Extend the assistant into an AWS-internal Slack workspace so the full account team can interrogate meeting intelligence asynchronously — without exposing anything to the customer.
+
+**Core concept:**
+- Per-meeting Slack channel auto-created on meeting start (e.g. `#mtg-acme-2026-04-23`)
+- AWS participants added automatically (SA, manager, specialist SAs, PSA/CSM)
+- Slack bot answers questions grounded in the saved meeting record + Bedrock KB
+- Full context available: transcript, Track A/B analysis, speaker mapping, directives, action items
+
+**Key use cases:**
+- SA Manager: "Summarize the deal risk and blockers" — without reading the full transcript
+- Specialist SA joining a follow-up: "What did the customer say about their Redshift usage?"
+- PSA/CSM: "List all open action items for the AWS team"
+- SA peer review: "What architecture did we propose and why?"
+
+**Design decisions:**
+- AWS-only channel → no trust boundary problem, no context filtering needed, full analysis visible
+- Slack identity → meeting role mapping (SA who ran the meeting vs. specialist vs. manager) — used for response calibration, not access control
+- Two query modes: (1) RAG over saved `meetings/{session_id}.json` + KB for post-meeting, (2) live query against active session context during meeting
+- Response always grounded — cites transcript segments or KB sources, no hallucination
+- Phase 2 shared `SessionContext` improves live-meeting query quality but is not required to ship Phase 6
+
+**Dependencies:**
+- Saved meeting JSON (already implemented)
+- Bedrock KB (already implemented)
+- Slack API (bot token, channel management, event subscriptions)
+- Phase 2 shared context recommended for live-meeting query path (not blocking for post-meeting path)
+
 ---
 
 ## Key Technical Decisions (do not revisit without reason)
