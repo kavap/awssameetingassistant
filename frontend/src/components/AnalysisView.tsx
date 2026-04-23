@@ -1,10 +1,45 @@
+import ReactMarkdown from "react-markdown";
 import type { AnalysisResult } from "../types";
 
 const STAGE_CONFIG = {
   1: { label: "Gathering Context", color: "text-yellow-400", bg: "bg-yellow-900/30 border-yellow-700" },
-  2: { label: "Building Picture", color: "text-blue-400",   bg: "bg-blue-900/30 border-blue-700"   },
-  3: { label: "Ready",            color: "text-emerald-400", bg: "bg-emerald-900/30 border-emerald-700" },
+  2: { label: "Building Picture",  color: "text-blue-400",   bg: "bg-blue-900/30 border-blue-700"   },
+  3: { label: "Ready",             color: "text-emerald-400", bg: "bg-emerald-900/30 border-emerald-700" },
 } as const;
+
+/** Render a markdown string with consistent dark-theme prose styling. */
+function Markdown({ children }: { children: string }) {
+  return (
+    <ReactMarkdown
+      components={{
+        p:      ({ children }) => <p className="text-xs text-slate-300 leading-relaxed mb-1.5 last:mb-0">{children}</p>,
+        strong: ({ children }) => <strong className="font-semibold text-slate-100">{children}</strong>,
+        em:     ({ children }) => <em className="italic text-slate-400">{children}</em>,
+        ul:     ({ children }) => <ul className="list-disc list-outside pl-4 space-y-0.5 mb-1.5">{children}</ul>,
+        ol:     ({ children }) => <ol className="list-decimal list-outside pl-4 space-y-0.5 mb-1.5">{children}</ol>,
+        li:     ({ children }) => <li className="text-xs text-slate-300 leading-relaxed">{children}</li>,
+        h1:     ({ children }) => <h1 className="text-sm font-semibold text-slate-200 mt-2 mb-1">{children}</h1>,
+        h2:     ({ children }) => <h2 className="text-xs font-semibold text-slate-200 mt-2 mb-1 uppercase tracking-wide">{children}</h2>,
+        h3:     ({ children }) => <h3 className="text-xs font-semibold text-slate-300 mt-1.5 mb-0.5">{children}</h3>,
+        code:   ({ children }) => <code className="text-xs font-mono bg-slate-800 text-emerald-300 px-1 py-0.5 rounded">{children}</code>,
+        pre:    ({ children }) => <pre className="text-xs font-mono bg-slate-800 text-emerald-300 p-2 rounded overflow-x-auto mb-1.5">{children}</pre>,
+        a:      ({ href, children }) => (
+          <a href={href} target="_blank" rel="noopener noreferrer"
+            className="text-blue-400 hover:text-blue-300 hover:underline">
+            {children}
+          </a>
+        ),
+        blockquote: ({ children }) => (
+          <blockquote className="border-l-2 border-slate-600 pl-3 italic text-slate-400 my-1">
+            {children}
+          </blockquote>
+        ),
+      }}
+    >
+      {children}
+    </ReactMarkdown>
+  );
+}
 
 function Section({ title, content }: { title: string; content: string }) {
   const text = content?.trim();
@@ -16,7 +51,7 @@ function Section({ title, content }: { title: string; content: string }) {
       {isGathering ? (
         <p className="text-xs text-slate-500 italic">{text}</p>
       ) : (
-        <div className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap">{text}</div>
+        <Markdown>{text}</Markdown>
       )}
     </div>
   );

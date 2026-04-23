@@ -99,6 +99,8 @@ export type WsMessageType =
   | "analysis_update"
   | "steered_analysis_update"
   | "meeting_started"
+  | "meeting_paused"
+  | "meeting_resumed"
   | "meeting_stopped"
   | "speaker_mapping_update"
   | "error";
