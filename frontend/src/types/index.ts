@@ -109,7 +109,7 @@ export interface WsMessage {
   payload: unknown;
 }
 
-export type MeetingStatus = "idle" | "recording" | "stopped";
+export type MeetingStatus = "idle" | "recording" | "paused" | "stopped";
 export type ConnectionStatus = "connecting" | "connected" | "disconnected";
 
 export interface MeetingIndexEntry {

@@ -161,6 +161,15 @@ export default function App() {
   }
 
   const isRecording = meetingStatus === "recording";
+  const isPaused = meetingStatus === "paused";
+
+  async function pauseMeeting() {
+    await fetch(`${BACKEND}/meeting/pause`, { method: "POST" });
+  }
+
+  async function resumeMeeting() {
+    await fetch(`${BACKEND}/meeting/resume`, { method: "POST" });
+  }
   const stage = analysisTrackA?.stage ?? null;
 
   const STAGE_LABELS: Record<number, string> = {
@@ -186,11 +195,11 @@ export default function App() {
         </div>
 
         {/* Recording + stage indicator */}
-        {isRecording && (
+        {(isRecording || isPaused) && (
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 text-xs text-red-400">
-              <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-              LIVE
+            <div className={`flex items-center gap-1.5 text-xs ${isPaused ? "text-yellow-400" : "text-red-400"}`}>
+              <span className={`w-2 h-2 rounded-full ${isPaused ? "bg-yellow-500" : "bg-red-500 animate-pulse"}`} />
+              {isPaused ? "PAUSED" : "LIVE"}
             </div>
             {stage && (
               <span className={`flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full border ${
@@ -227,7 +236,7 @@ export default function App() {
             History
           </button>
 
-          {!isRecording ? (
+          {!isRecording && !isPaused ? (
             <button
               onClick={() => setShowModal(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs font-medium rounded transition-colors"
@@ -238,15 +247,39 @@ export default function App() {
               Start Meeting
             </button>
           ) : (
-            <button
-              onClick={stopMeeting}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-medium rounded transition-colors"
-            >
-              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-                <rect x="4" y="4" width="16" height="16" rx="2" />
-              </svg>
-              Stop
-            </button>
+            <>
+              {isPaused ? (
+                <button
+                  onClick={resumeMeeting}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium rounded transition-colors"
+                >
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                  Resume
+                </button>
+              ) : (
+                <button
+                  onClick={pauseMeeting}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-medium rounded transition-colors"
+                >
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                    <rect x="6" y="4" width="4" height="16" rx="1" />
+                    <rect x="14" y="4" width="4" height="16" rx="1" />
+                  </svg>
+                  Pause
+                </button>
+              )}
+              <button
+                onClick={stopMeeting}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-medium rounded transition-colors"
+              >
+                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                  <rect x="4" y="4" width="16" height="16" rx="2" />
+                </svg>
+                Stop
+              </button>
+            </>
           )}
         </div>
       </header>

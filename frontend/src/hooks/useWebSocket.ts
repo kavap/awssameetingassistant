@@ -124,6 +124,14 @@ export function useWebSocket() {
             setSpeakerMappings(p.mappings);
             break;
           }
+          case "meeting_paused": {
+            setMeetingStatus("paused");
+            break;
+          }
+          case "meeting_resumed": {
+            setMeetingStatus("recording");
+            break;
+          }
           case "meeting_stopped": {
             setMeetingStatus("stopped");
             break;

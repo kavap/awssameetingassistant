@@ -48,6 +48,8 @@ analysis_engine: AnalysisEngine | None = None
 
 _meeting_task: asyncio.Task | None = None
 _stop_event: asyncio.Event = asyncio.Event()
+_pause_event: asyncio.Event = asyncio.Event()
+_pause_event.set()  # set = not paused (audio flows freely)
 _session_id: str | None = None
 _customer_id: str = "anonymous"
 _meeting_type: str = "Customer Meeting"
@@ -127,6 +129,13 @@ async def _dispatch_recommendation(ccm_event) -> None:
                 ccm_event.trigger_text,
                 role="USER",
             )
+
+
+async def _pausable_audio(gen, pause_event: asyncio.Event):
+    """Wrap an async audio generator so it blocks while paused."""
+    async for chunk in gen:
+        await pause_event.wait()  # blocks when event is cleared (paused)
+        yield chunk
 
 
 async def handle_ccm_event(ccm_event) -> None:
@@ -323,7 +332,7 @@ async def get_meeting_config():
 
 @app.post("/meeting/start")
 async def start_meeting(body: StartMeetingRequest = StartMeetingRequest()):
-    global _meeting_task, _stop_event, _session_id, _customer_id, _meeting_type
+    global _meeting_task, _stop_event, _pause_event, _session_id, _customer_id, _meeting_type
     global _meeting_name, _participants, _selected_roles, _speaker_mapping
     global _customer_context, _last_trigger, analysis_engine
 
@@ -335,6 +344,8 @@ async def start_meeting(body: StartMeetingRequest = StartMeetingRequest()):
 
     ccm_engine.reset()
     _stop_event = asyncio.Event()
+    _pause_event = asyncio.Event()
+    _pause_event.set()  # ensure not paused at start
     _session_id = str(uuid.uuid4())
     _customer_id = (body.customer_id or "anonymous").strip().lower()
     _meeting_type = body.meeting_type if body.meeting_type in MEETING_TYPES else "Customer Meeting"
@@ -364,7 +375,7 @@ async def start_meeting(body: StartMeetingRequest = StartMeetingRequest()):
 
     async def run_pipeline():
         await stream_fn(
-            audio_gen=audio_gen,
+            audio_gen=_pausable_audio(audio_gen, _pause_event),
             ccm_engine=ccm_engine,
             ws_manager=ws_manager,
             event_queue=event_queue,
@@ -428,6 +439,36 @@ async def stop_meeting():
     logger.info(f"Meeting stopped. Session: {_session_id}, Customer: {_customer_id}")
     _session_id = None
     return {"status": "stopped"}
+
+
+@app.post("/meeting/pause")
+async def pause_meeting():
+    global _pause_event
+    if _meeting_task is None or _meeting_task.done():
+        return JSONResponse(status_code=409, content={"error": "No active meeting"})
+    _pause_event.clear()  # block audio generator
+    await ws_manager.broadcast({
+        "type": "meeting_paused",
+        "ts": time.time(),
+        "payload": {"session_id": _session_id},
+    })
+    logger.info(f"Meeting paused. Session: {_session_id}")
+    return {"status": "paused"}
+
+
+@app.post("/meeting/resume")
+async def resume_meeting():
+    global _pause_event
+    if _meeting_task is None or _meeting_task.done():
+        return JSONResponse(status_code=409, content={"error": "No active meeting"})
+    _pause_event.set()  # unblock audio generator
+    await ws_manager.broadcast({
+        "type": "meeting_resumed",
+        "ts": time.time(),
+        "payload": {"session_id": _session_id},
+    })
+    logger.info(f"Meeting resumed. Session: {_session_id}")
+    return {"status": "resumed"}
 
 
 @app.post("/meeting/reset")
