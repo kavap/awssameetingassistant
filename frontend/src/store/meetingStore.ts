@@ -180,8 +180,6 @@ export const useMeetingStore = create<MeetingStore>((set, get) => ({
       participants: [],
       selectedRoles: [],
       speakerMappings: {},
-      availableRoles: [],
-      roleDescriptions: {},
       pendingCorrections: {},
     }),
 }));
