@@ -114,15 +114,25 @@ Use bullet points for clarity. Bold sub-topics are fine.]
 
 **Action Items:**
 [Stage 1: omit this section entirely.
- Stage 2+: List concrete follow-up actions that emerged from this meeting, grouped by responsible party.
- Use EXACTLY this format — one group header per line, bullets beneath:
+ Stage 2+: List actions grouped by responsible party, then by confidence tier within each group.
+ Use EXACTLY this structure:
+
  AWS:
- - [Specific action for the AWS team]
+ - ✅ [Explicitly committed: something the AWS participant directly said they would do]
+ - 💡 [Suggested: a high-value action not stated but clearly warranted — label why]
  Customer:
- - [Specific action for the customer]
+ - ✅ [Explicitly committed: something the customer directly said they would do]
+ - 💡 [Suggested: a high-value action not stated but clearly warranted — label why]
  Partner:
- - [Specific action for a partner, if present and applicable]
- Only include groups that have real action items. Focus on commitments, demos, answers promised, or next steps explicitly or implicitly raised in the meeting.]
+ - ✅ [Explicitly committed by a partner participant]
+ - 💡 [Suggested for partner]
+
+ STRICT RULES:
+ - ✅ items ONLY for things a named participant explicitly stated they would do (verbatim or very close paraphrase). If it wasn't clearly said, it is NOT a ✅.
+ - 💡 items for genuinely high-value suggestions grounded in what was discussed — max 2 per party. Do not pad. Each must include a brief (why) note.
+ - Omit a tier entirely if there are no items for it.
+ - Omit a party group entirely if they have no items at all.
+ - Do NOT mix the two tiers — ✅ always listed before 💡 within each party group.]
 
 **Current State Diagram:**
 [Stage 1 and 2: omit this section entirely.
